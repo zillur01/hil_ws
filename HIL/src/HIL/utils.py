@@ -1,0 +1,40 @@
+import numpy as np
+
+from sensor_msgs.msg import PointCloud2, CameraInfo, Image
+from tf.transformations import quaternion_matrix
+
+def inverse_transform(T):
+    R, t = T[0:3, 0:3], T[0:3, 3]
+    print(f"R:{R}, t: {t}")
+    inv_T = np.eye(4)
+    inv_T[0:3,0:3] = np.transpose(R)
+    inv_T[0:3, 3] = -R @ t 
+    return inv_T
+
+def tf_to_transform(trans, Q):
+    T = quaternion_matrix(Q)
+    T[0:3, 3] = trans
+    return T
+
+def project_to_image(pts_3d, proj_mat, T_depth_rgb):
+    """
+    Apply the perspective projection
+    Args:
+        pts_3d:     3D points in camera coordinate [3, npoints]
+        proj_mat:   Projection matrix [3, 4]
+    """
+    num_pts = pts_3d.shape[0]
+    # Change to homogenous coordinates
+    pts_3d = np.vstack((pts_3d.T, np.ones(num_pts)))
+    points = proj_mat @ T_depth_rgb @ pts_3d
+    points[:2, :] /= points[2, :]
+    return points[:2, :], points[2, :]
+
+def get_projection_matrix(info_msg: CameraInfo):
+    P = np.array(info_msg.P).reshape(3,4)
+    print(f"Projection Matrix:{P}")
+    return P
+
+def get_img_size(info_msg: CameraInfo):
+    print(f"Camera Dims: ({info_msg.height, info_msg.width})")
+    return info_msg.height, info_msg.width
