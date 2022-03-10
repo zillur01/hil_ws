@@ -1,4 +1,4 @@
-# HIL Project
+# HIL_Research
 ## Helpful tools
 - Catkin_tools: https://catkin-tools.readthedocs.io/en/latest/installing.html
 ## Resources

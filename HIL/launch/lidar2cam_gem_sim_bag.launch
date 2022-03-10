@@ -1,0 +1,31 @@
+<launch>
+
+  <param name="/use_sim_time" value="true"/>
+
+  <node
+    name="play" 
+    pkg="rosbag" 
+    type="play" 
+    args="$(find HIL)/data/GEM_rosbags/sim_gem_moving.bag 
+            /gem/velodyne_points:=/cloud 
+            /gem/front_single_camera/camera_info:=/camera_info
+            /gem/front_single_camera/image_raw:=/rgb
+            /tf_static:=/tf
+            --delay=5 --clock"
+  />
+<!-- 
+  <node 
+    name="pointcloud2_to_pcd" 
+    pkg="pcl_ros"
+    type="pointcloud_to_pcd" 
+    args="input:=/cloud _prefix:=/$(find HIL)/data/pcd_data/"
+  /> -->
+
+  <node 
+    name="gem_sim_projector" 
+    pkg="HIL" 
+    type="project_gem_sim.py" 
+    output="screen"
+  />
+
+</launch>

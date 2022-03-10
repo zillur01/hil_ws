@@ -157,6 +157,7 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
 catkin_install_python(PROGRAMS
   project_realsense.py
+  project_gem_sim.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
