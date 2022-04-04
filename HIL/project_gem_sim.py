@@ -7,12 +7,13 @@ RGB_TOPIC = "/rgb"
 LIDAR_PC_TOPIC = "/cloud"
 CAMERA_INFO_TOPIC = "/camera_info"
 T_depth_rgb = np.array([
-    [0, 1, 0, 0.55],
-    [0, 0, 1, -1.19],
-    [-1, 0, 0, 0],
+    [0, 1, 0, -0.55],
+    [0, 0, 1, 0],
+    [-1, 0, 0, -.32],
     [0, 0, 0, 1]
 ])
-
+# -0.12 0 1.51 lidar pose from center link
+# "0.43 0 1.19" camera pose from center link
 def main():
     lidar2cam_node = lidar2camNode(
         CAMERA_INFO_TOPIC,
