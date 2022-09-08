@@ -1,0 +1,30 @@
+<launch>
+
+  <!-- <param name="/use_sim_time" value="true"/> -->
+
+  <node
+    name="play" 
+    pkg="rosbag" 
+    type="play" 
+    args="$(find HIL)/data/GEM_rosbags/marker_static.bag
+            /lidar1/velodyne_points:=/cloud 
+            /zed2/zed_node/left/camera_info:=/camera_info
+            /zed2/zed_node/left/image_rect_color:=/rgb
+            --delay=2"
+  />
+<!-- 
+  <node 
+    name="pointcloud2_to_pcd" 
+    pkg="pcl_ros"
+    type="pointcloud_to_pcd" 
+    args="input:=/cloud _prefix:=/$(find HIL)/data/pcd_data/"
+  /> -->
+
+  <node 
+    name="gem_sim_projector" 
+    pkg="HIL" 
+    type="project_gem_sim.py" 
+    output="screen"
+  />
+
+</launch>

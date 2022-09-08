@@ -6,7 +6,7 @@
     name="play" 
     pkg="rosbag" 
     type="play" 
-    args="$(find HIL)/data/GEM_rosbags/sim_gem_moving.bag 
+    args="$(find HIL)/data/GEM_rosbags/sim_gem_static.bag 
             /gem/velodyne_points:=/cloud 
             /gem/front_single_camera/camera_info:=/camera_info
             /gem/front_single_camera/image_raw:=/rgb

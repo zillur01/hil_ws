@@ -1,11 +1,14 @@
 import rospy
+import message_filters
 from sensor_msgs.msg import PointCloud2, CameraInfo, Image
 import ros_numpy
 from cv_bridge import CvBridge
 import cv2
 import matplotlib.pyplot as plt
 from HIL.utils import *
-from HIL.realsense_utils import *
+
+k_time_sync_queue_size = 10
+k_time_sync_slop = 1 # allowed difference in seconds between messages to sync
 
 class lidar2camNode:
     def __init__(self, CAMERA_INFO_TOPIC, LIDAR_PC_TOPIC, RGB_TOPIC, T_depth_rgb):
@@ -13,21 +16,23 @@ class lidar2camNode:
         self.camera_info = rospy.wait_for_message(CAMERA_INFO_TOPIC, CameraInfo)
         self.P = get_projection_matrix(self.camera_info)
         self.height, self.width = get_img_size(self.camera_info)
-        # print(get_realsense_tf())
         self.T_depth_rgb = T_depth_rgb
 
-        self.pc_sub = rospy.Subscriber(LIDAR_PC_TOPIC, PointCloud2, self.pc_callback)
         self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber(RGB_TOPIC,Image,self.image_callback)
         self.curImage = None
+        
+        self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
+        self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
+        self.pc_im_sub = message_filters.ApproximateTimeSynchronizer(
+            [self.pc_sub, self.image_sub], 
+            k_time_sync_queue_size, 
+            k_time_sync_slop
+            )
+        self.pc_im_sub.registerCallback(self.pc_im_callback)
 
-    def image_callback(self, img_msg: Image):
-        self.curImage = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='passthrough')
-        self.curImage = cv2.cvtColor(self.curImage, cv2.COLOR_BGR2RGB)
-        # cv2.imshow("Orig Image window", self.curImage)
-        # cv2.waitKey(1)
+    def pc_im_callback(self, pc_msg: PointCloud2, img_msg: Image, ):
+        self.curImage = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
 
-    def pc_callback(self, pc_msg: PointCloud2):
         pts_depth = ros_numpy.point_cloud2.pointcloud2_to_xyz_array(pc_msg, remove_nans=True)
         # print(pts_depth[:20])
         print(np.min(pts_depth), np.max(pts_depth), pts_depth[1500:1510])
@@ -51,9 +56,10 @@ class lidar2camNode:
         cmap = np.array([cmap(i) for i in range(256)])[:, :3] * 255
         print("Depth Mean:", np.mean(imgfov_pc_depth))
         depth_map = np.clip(255* (imgfov_pc_depth/max_depth), 0, 255).astype(int)
-
+        print(cmap[depth_map].shape)
         # Paint lidar points onto the image 
         depth_image = self.curImage.copy()
+        print(depth_image.shape)
         x_pixels = imgfov_pc_pixel[0].astype(int)
         y_pixels = imgfov_pc_pixel[1].astype(int)
         depth_image[y_pixels, x_pixels] = cmap[depth_map]
