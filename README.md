@@ -1,6 +1,6 @@
 # HIL_Research
 ## Getting Started
-1. Setup your catkin workspace: `mkdir - p ~/catkin_ws/src` and clone this repo into the `src` subfolder
+1. Setup your catkin workspace: `mkdir -p ~/catkin_ws/src` and clone this repo into the `src` subfolder
 2. Run `sh setup_scripts/ros_noetic_install.sh` to install ros noetic
 3. Run `sh setup_scripts/hdl_slam_install.sh` to install the hdl_slam dependency
 4. TODO: Add rosdep dependencies to package.xml
