@@ -14,12 +14,12 @@ k_time_sync_slop = 1 # allowed difference in seconds between messages to sync
 class lidar2camNode:
     def __init__(self, CAMERA_INFO_TOPIC, LIDAR_PC_TOPIC, RGB_TOPIC, T_depth_rgb):
         rospy.init_node('lidar2cam', anonymous=True)
-        self.camera_info = rospy.wait_for_message(CAMERA_INFO_TOPIC, CameraInfo)
+        self.camera_info = get_camera_info(CAMERA_INFO_TOPIC)
         self.P = get_projection_matrix(self.camera_info)
         self.height, self.width = get_img_size(self.camera_info)
-        # self.T_depth_rgb = T_depth_rgb
-        listener = tf.TransformListener()
-        self.T_depth_rgb = get_tf('velodyne', 'front_single_camera_link', listener, convertToTransform=True)
+        self.T_depth_rgb = T_depth_rgb
+        # listener = tf.TransformListener()
+        # self.T_depth_rgb = get_tf('velodyne', 'front_single_camera_link', listener, convertToTransform=True)
 
         self.bridge = CvBridge()
         self.curImage = None

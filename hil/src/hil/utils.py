@@ -1,7 +1,9 @@
 import numpy as np
-
+import rospy
 from sensor_msgs.msg import PointCloud2, CameraInfo, Image
 from tf.transformations import quaternion_matrix
+
+k_wait_msg_timeout = 10
 
 def inverse_transform(T):
     R, t = T[0:3, 0:3], T[0:3, 3]
@@ -29,6 +31,21 @@ def project_to_image(pts_3d, proj_mat, T_depth_rgb):
     points = proj_mat @ T_depth_rgb @ pts_3d
     points[:2, :] /= points[2, :]
     return points[:2, :], points[2, :]
+
+def get_camera_info(topic_name: str)-> CameraInfo:
+    cam_info = None
+    try:
+        cam_info = rospy.wait_for_message(topic_name, CameraInfo, timeout=k_wait_msg_timeout)
+    except rospy.ROSException:
+        print("Exception while getting camera info")
+    return cam_info
+
+def get_dist_matrix(info_msg: CameraInfo):
+    return info_msg.D
+
+def get_camera_matrix(info_msg: CameraInfo):
+    K = np.array(info_msg.K).reshape(3,3)
+    return K
 
 def get_projection_matrix(info_msg: CameraInfo):
     P = np.array(info_msg.P).reshape(3,4)
