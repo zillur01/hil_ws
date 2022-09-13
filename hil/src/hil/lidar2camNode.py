@@ -5,7 +5,8 @@ import ros_numpy
 from cv_bridge import CvBridge
 import cv2
 import matplotlib.pyplot as plt
-from HIL.utils import *
+from hil.utils import *
+from hil.tf_funcs import *
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 1 # allowed difference in seconds between messages to sync
@@ -16,7 +17,9 @@ class lidar2camNode:
         self.camera_info = rospy.wait_for_message(CAMERA_INFO_TOPIC, CameraInfo)
         self.P = get_projection_matrix(self.camera_info)
         self.height, self.width = get_img_size(self.camera_info)
-        self.T_depth_rgb = T_depth_rgb
+        # self.T_depth_rgb = T_depth_rgb
+        listener = tf.TransformListener()
+        self.T_depth_rgb = get_tf('velodyne', 'front_single_camera_link', listener, convertToTransform=True)
 
         self.bridge = CvBridge()
         self.curImage = None

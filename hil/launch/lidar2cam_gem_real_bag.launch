@@ -6,7 +6,7 @@
     name="play" 
     pkg="rosbag" 
     type="play" 
-    args="$(find HIL)/data/GEM_rosbags/marker_static.bag
+    args="$(find hil)/data/GEM_rosbags/sensor.bag
             /lidar1/velodyne_points:=/cloud 
             /zed2/zed_node/left/camera_info:=/camera_info
             /zed2/zed_node/left/image_rect_color:=/rgb
@@ -17,12 +17,12 @@
     name="pointcloud2_to_pcd" 
     pkg="pcl_ros"
     type="pointcloud_to_pcd" 
-    args="input:=/cloud _prefix:=/$(find HIL)/data/pcd_data/"
+    args="input:=/cloud _prefix:=/$(find hil)/data/pcd_data/"
   /> -->
 
   <node 
     name="gem_sim_projector" 
-    pkg="HIL" 
+    pkg="hil" 
     type="project_gem_sim.py" 
     output="screen"
   />

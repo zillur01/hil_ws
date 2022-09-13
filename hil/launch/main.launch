@@ -6,14 +6,14 @@
     <param name="/stamped_vel" value="$(arg IS_TWISTSTAMPED)"/>
 
     <!-- Launch HDL SLAM -->
-    <include file="$(find HIL)/launch/hdl_slam.launch"/>
+    <include file="$(find hil)/launch/hdl_slam.launch"/>
 
     <!-- Play Rosbag -->
     <node
         name="play" 
         pkg="rosbag" 
         type="play" 
-        args="$(find HIL)/data/GEM_rosbags/sim_gem_moving.bag 
+        args="$(find hil)/data/GEM_rosbags/sim_gem_moving.bag 
                 /gem/velodyne_points:=/cloud
                 /gem/front_single_camera/camera_info:=/camera_info
                 /gem/front_single_camera/image_raw:=/rgb

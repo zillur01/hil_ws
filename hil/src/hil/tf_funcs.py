@@ -1,7 +1,7 @@
 import rospy
 import tf
 
-from HIL.utils import *
+from hil.utils import *
 k_tf_timeout = rospy.Duration(1) # timeout for waiting for a tf msg
 
 def get_tf(src_frame: str, dst_frame: str, tf_listener: tf.TransformListener, convertToTransform=True):

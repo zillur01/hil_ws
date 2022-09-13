@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>HIL</name>
+  <name>hil</name>
   <version>0.0.0</version>
-  <description>The HIL package</description>
+  <description>The hil package</description>
   <maintainer email="bhargav2900@gmail.com">Bhargav Chandaka</maintainer>
 
 
@@ -15,7 +15,7 @@
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/HIL</url> -->
+  <!-- <url type="website">http://wiki.ros.org/hil</url> -->
 
 
   <!-- Author tags are optional, multiple are allowed, one per tag -->

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from HIL import *
-from HIL.lidar2camNode import lidar2camNode
+from hil import *
+from hil.lidar2camNode import lidar2camNode
 import numpy as np
 
 RGB_TOPIC = "/rgb"

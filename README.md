@@ -7,7 +7,7 @@
 5. `cd ~/catkin_ws` and `catkin_make` to build the packages in your workspace
 6. `source devel/setup.bash` so ros know where to find your custom packages
 7. TODO: Download some demo rosbags 
-8. Try out some of `HIL` package launch files!
+8. Try out some of `hil` package launch files!
 
 ## Helpful tools
 - Catkin_tools: https://catkin-tools.readthedocs.io/en/latest/installing.html
