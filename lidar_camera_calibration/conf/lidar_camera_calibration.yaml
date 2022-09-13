@@ -1,0 +1,5 @@
+﻿lidar_camera_calibration:
+  camera_frame_topic: /rgb
+  camera_info_topic: /camera_info
+  velodyne_topic: /cloud
+
