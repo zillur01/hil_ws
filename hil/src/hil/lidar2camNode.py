@@ -45,7 +45,8 @@ class lidar2camNode:
 
         # Filter lidar points to be within image FOV
         inds = np.where((pts_2d[0, :] < self.width) & (pts_2d[0, :] >= 0) &
-                        (pts_2d[1, :] < self.height) & (pts_2d[1, :] >= 0)
+                        (pts_2d[1, :] < self.height) & (pts_2d[1, :] >= 0) &
+                        (depths > 1) & (depths < 3)
                         )[0]
         print(inds.shape)
         # Filter out pixels points

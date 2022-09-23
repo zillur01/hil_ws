@@ -9,7 +9,7 @@
             /lidar1/velodyne_points:=/cloud
             /zed2/zed_node/left/camera_info:=/camera_info
             /zed2/zed_node/left/image_rect_color:=/rgb
-            --clock
+            --clock --loop
             --delay=1"
   />
 

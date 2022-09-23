@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from hil.utils import *
 from hil.tf_funcs import *
 from lidar_camera_calibration.msg import marker_6dof
-
+from scipy.spatial.transform import Rotation as rot
 k_time_sync_queue_size = 10
 k_time_sync_slop = 1 # allowed difference in seconds between messages to sync
 
@@ -37,7 +37,7 @@ class arucoMappingNode:
         corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
         # Filter aruco markers by id
         valid_inds = [i for i in range(len(ids)) if ids[i] in self.desired_ids]
-        corners = [corners[i] for i in valid_inds]
+        corners = [np.roll(corners[i], 1,1) for i in valid_inds]
         ids = np.array([ids[i] for i in valid_inds])
         result_image = self.curImage.copy()
         if len(ids) > 0:
@@ -47,14 +47,25 @@ class arucoMappingNode:
                                 get_camera_matrix(self.camera_info), 
                                 get_dist_matrix(self.camera_info)
                             )
+            
             # Publish marker info for lidar_camera_calibration
             output_marker_6dof = marker_6dof()
             output_marker_6dof.header.stamp = rospy.Time.now()
-            output_marker_6dof.num_of_markers = len(ids)
             output_marker_6dof.dof.data.clear()
+            output_marker_6dof.num_of_markers = len(ids)
+            adjustmentR = np.array([
+                [1,0,0],
+                [0,0,-1],
+                [0,1,0]
+            ])
             for i in range(len(rvecs)):
+                output_marker_6dof.dof.data.append(ids[i])
                 rvec = rvecs[i][0]
                 tvec = tvecs[i][0]
+                rTemp = rot.from_rotvec(rvec)
+                rvec = rot.from_matrix(rTemp.as_matrix()@ adjustmentR)
+                rvec = rvec.as_rotvec()
+                # tvec = adjustmentR @ tvec
                 for j in tvec:
                     output_marker_6dof.dof.data.append(float(j))
                 for j in rvec:
