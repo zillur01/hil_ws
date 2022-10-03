@@ -9,7 +9,7 @@
     args="$(find hil)/data/GEM_rosbags/marker_static.bag
             /lidar1/velodyne_points:=/cloud 
             /zed2/zed_node/left/camera_info:=/camera_info
-            /zed2/zed_node/left/image_rect_color:=/rgb
+            /zed2/zed_node/left/image_rect_color:=/rgb --loop
             --delay=2"
   />
 <!-- 

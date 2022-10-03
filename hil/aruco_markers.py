@@ -7,7 +7,7 @@ RGB_TOPIC = "/rgb"
 CAMERA_INFO_TOPIC = "/camera_info"
 
 def main():
-    desired_ids = [ 11]
+    desired_ids = [5, 11]
     marker_length = .145
     arucoMapping_node = arucoMappingNode(
         CAMERA_INFO_TOPIC,

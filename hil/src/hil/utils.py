@@ -31,7 +31,18 @@ def project_to_image(pts_3d, proj_mat, T_depth_rgb):
     points = proj_mat @ T_depth_rgb @ pts_3d
     points[:2, :] /= points[2, :]
     return points[:2, :], points[2, :]
-
+def applyTransform(pts_3d, T):
+    """
+    Apply the given transform to a set of points
+    Args:
+        pts_3d:     3D points [3, npoints]
+        T:  Transformation Matrix [4, 4]
+    """
+    num_pts = pts_3d.shape[0]
+    # Change to homogenous coordinates
+    pts_3d = np.vstack((pts_3d.T, np.ones(num_pts)))
+    points = T @ pts_3d
+    return points[:3].T
 def get_camera_info(topic_name: str)-> CameraInfo:
     cam_info = None
     try:

@@ -3,10 +3,13 @@ from hil import *
 from hil.lidar2camNode import lidar2camNode
 import numpy as np
 
+# INPUT TOPICS
 RGB_TOPIC = "/rgb"
 LIDAR_PC_TOPIC = "/cloud"
 CAMERA_INFO_TOPIC = "/camera_info"
 
+# OUTPUT TOPICS
+PROJECTED_TOPIC = "/projected"
 T_depth_rgb = np.array([
     [0, -1, 0, 0.2],
     [0, 0, -1, -0.19],
@@ -54,6 +57,7 @@ def main():
         CAMERA_INFO_TOPIC,
         LIDAR_PC_TOPIC,
         RGB_TOPIC,
+        PROJECTED_TOPIC,
         T_depth_rgb
     )
     lidar2cam_node.run()
