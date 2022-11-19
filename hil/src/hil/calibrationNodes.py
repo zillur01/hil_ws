@@ -58,7 +58,7 @@ class arucoMappingNode:
                 [0,0,-1],
                 [0,1,0]
             ])
-            for i in range(len(rvecs)):
+            for i in range(len(rvecs)-1, -1, -1):
                 output_marker_6dof.dof.data.append(ids[i])
                 rvec = rvecs[i][0]
                 tvec = tvecs[i][0]

@@ -1,0 +1,24 @@
+<launch>
+
+  <!-- <param name="/use_sim_time" value="true"/> -->
+
+  <node
+    name="play" 
+    pkg="rosbag" 
+    type="play" 
+    args="$(find hil)/data/GEM_rosbags/sensor.bag
+            /lidar1/velodyne_points:=/cloud 
+            /zed2/zed_node/left/camera_info:=/camera_info
+            /zed2/zed_node/left/image_rect_color:=/rgb
+            /novatel/inspva:=/gps
+            --delay=2"
+  />
+
+  <node 
+    name="gem_sim_projector" 
+    pkg="hil" 
+    type="saveData.py" 
+    output="screen"
+  />
+
+</launch>

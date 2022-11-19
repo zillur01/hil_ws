@@ -5,11 +5,8 @@
     name="play" 
     pkg="rosbag" 
     type="play" 
-    args="$(find hil)/data/GEM_rosbags/marker_static.bag
-            /lidar1/velodyne_points:=/cloud
-            /zed2/zed_node/left/camera_info:=/camera_info
-            /zed2/zed_node/left/image_rect_color:=/rgb
-            --clock --loop
+    args="$(find hil)/data/GEM_rosbags/marker_static.bag 
+            --clock --loop -s 3.0 -u 0.5
             --delay=1"
   />
   <node name="aruco_markers" pkg="hil" 

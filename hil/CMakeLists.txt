@@ -162,6 +162,7 @@ catkin_install_python(PROGRAMS
   project_gem_sim.py
   aruco_markers.py
   mapping.py
+  saveData.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

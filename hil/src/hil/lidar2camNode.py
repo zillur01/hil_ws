@@ -17,6 +17,7 @@ class lidar2camNode:
         rospy.init_node('lidar2cam', anonymous=True)
         self.camera_info = get_camera_info(CAMERA_INFO_TOPIC)
         self.P = get_projection_matrix(self.camera_info)
+        print(self.P)
         self.height, self.width = get_img_size(self.camera_info)
         self.T_depth_rgb = T_depth_rgb
         # listener = tf.TransformListener()
@@ -52,7 +53,7 @@ class lidar2camNode:
         # Filter lidar points to be within image FOV
         inds = np.where((pts_2d[0, :] < self.width) & (pts_2d[0, :] >= 0) &
                         (pts_2d[1, :] < self.height) & (pts_2d[1, :] >= 0) 
-                        & (depths > 0)
+                        & (depths > 0) & (depths < 3)
                         )[0]
         print(inds.shape)
         # Filter out pixels points

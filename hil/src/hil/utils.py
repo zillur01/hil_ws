@@ -52,7 +52,7 @@ def get_camera_info(topic_name: str)-> CameraInfo:
     return cam_info
 
 def get_dist_matrix(info_msg: CameraInfo):
-    return info_msg.D
+    return np.array(info_msg.D)
 
 def get_camera_matrix(info_msg: CameraInfo):
     K = np.array(info_msg.K).reshape(3,3)
@@ -66,3 +66,60 @@ def get_projection_matrix(info_msg: CameraInfo):
 def get_img_size(info_msg: CameraInfo):
     print(f"Camera Dims: ({info_msg.height, info_msg.width})")
     return info_msg.height, info_msg.width
+
+
+def fit_rigid(src, tgt, normals=None, point_to_plane = False):
+  """
+  Args: 
+    src: source points ndarray of size (3, n)
+    tgt: target points ndarray of size (3,n)
+  """
+  if point_to_plane:
+    p = src
+    q = tgt
+    n = normals
+    c = np.cross(p.T,n.T).T
+    cx, cy, cz = c
+    nx, ny, nz = n
+    vals = np.zeros(p.shape[1])
+    for i in range(p.shape[1]):
+        vals[i] = ((p[:,i]-q[:,i]) @ n[:,i])
+    b = -np.array([
+        np.sum(cx*vals),
+        np.sum(cy*vals),
+        np.sum(cz*vals),
+        np.sum(nx*vals),
+        np.sum(ny*vals),
+        np.sum(nz*vals)
+    ])
+    print(b)
+    A_upper = np.hstack((c@c.T, c@n.T))
+    A_lower = np.hstack((n@c.T, n@n.T))
+    A = np.vstack((A_upper,A_lower))
+    print(A.shape)
+    L = np.linalg.cholesky(A)
+    y = np.linalg.solve(L,b)
+    alph, beta, gam, tx, ty, tz  = np.linalg.solve(L.T,y)
+    T = np.array([
+        [1, -gam, beta, tx],
+        [gam, 1, -alph, ty],
+        [-beta, alph, 1, tz],
+        [0, 0, 0, 1]
+    ])
+  else:
+    T = np.identity(4)
+    src_centroid = np.mean(src, axis=1)
+    tgt_centroid = np.mean(tgt, axis=1)
+    centered_src = (src.T - src_centroid).T
+    centered_tgt = (tgt.T - tgt_centroid).T
+    # print(centered_src, centered_tgt)
+    H = centered_src @ centered_tgt.T
+    # print(H)
+    U, S, Vh = np.linalg.svd(H)
+    R = Vh.T @ np.diag([1,1,np.linalg.det(Vh.T@U.T)]) @ U.T
+    # print(R)
+    t = tgt_centroid - R @ src_centroid
+    T[:3,:3] = R
+    T[:3, 3] = t
+  # -------------------------
+  return T

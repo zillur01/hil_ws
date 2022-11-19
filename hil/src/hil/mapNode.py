@@ -1,20 +1,29 @@
-from concurrent.futures.process import _threads_wakeups
-from operator import truediv
 import rospy
 import message_filters
 from sensor_msgs.msg import PointCloud2, CameraInfo, Image
+from geometry_msgs.msg import Pose, Point, Quaternion
+from visualization_msgs.msg import Marker
+import hil.rviz_tools as rviz_tools
 import ros_numpy
 from cv_bridge import CvBridge
 import cv2
 import matplotlib.pyplot as plt
 from hil.utils import *
 from hil.tf_funcs import *
+from hil.insertionEngine import insertionEngine
 from novatel_gps_msgs.msg import Inspva
 import math
 import utm
+import tf
+import tf.transformations as tftrans
+import os
+import open3d as o3d
+import rospkg
+import time
+rospack = rospkg.RosPack()
 
-k_time_sync_queue_size = 10
-k_time_sync_slop = 1 # allowed difference in seconds between messages to sync
+k_time_sync_queue_size = 1
+k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 
 class mapNode:
     def __init__(self, CAMERA_INFO_TOPIC, LIDAR_PC_TOPIC, RGB_TOPIC, GPS_TOPIC, PROJECTED_TOPIC, T_depth_rgb):
@@ -27,6 +36,55 @@ class mapNode:
         self.bridge = CvBridge()
         self.curImage = None
         
+        self.projected_pub = rospy.Publisher(PROJECTED_TOPIC, PointCloud2)
+        self.aug_im_publisher = rospy.Publisher('augmented_image', Image)
+
+        self.rgb_pointcloud = np.zeros(0, dtype=[('x', float), ('y', float), ('z', float),
+                                    ('rgb', np.float32)])
+
+        self.first_msg = False
+        self.start_gps = None
+
+        self.br = tf.TransformBroadcaster()
+        self.markers = rviz_tools.RvizMarkers('lidar2', 'visualization_marker')
+
+        # Pointcloud Insertion
+        self.model_path = os.path.join(rospack.get_path('hil'), 'data', 'models', "dummy.obj")
+        tri_mesh = o3d.io.read_triangle_mesh(self.model_path)
+        nPoints = 5000
+        pc = tri_mesh.sample_points_poisson_disk(nPoints)
+        model_pc = np.asarray(pc.points)
+        model_mat = np.array([
+            [0,0.02,0,5.77],
+            [0.02,0,0,-21],
+            [0,0,0.02,-1.7],
+            [0,0,0,1]
+        ])
+        scale_mat = np.diag([1,1,1,1])
+        model_pc = applyTransform(model_pc, model_mat @ scale_mat)
+        model_pts = np.zeros(model_pc.shape[0], 
+                        dtype=[('x', float), ('y', float), ('z', float),
+                                ('b', int), ('g', int), ('r', int)])
+        model_pts['x'] = model_pc[:, 0]
+        model_pts['y'] = model_pc[:, 1]
+        model_pts['z'] = model_pc[:, 2]
+
+        model_pts['r'] = np.full_like(model_pc[:,0], 255)
+        model_pts['g'] = np.full_like(model_pc[:,0], 0)
+        model_pts['b'] = np.full_like(model_pc[:,0], 0)
+        model_pts = ros_numpy.point_cloud2.merge_rgb_fields(model_pts)
+
+        self.rgb_pointcloud = np.hstack((self.rgb_pointcloud, model_pts))
+        
+        # Image Insertion
+        # model_mat2 = np.array([
+        #     [0,0.02,0,9],
+        #     [0.02,0,0,0],
+        #     [0,0,0.02,-1.7],
+        #     [0,0,0,1]
+        # ]).T
+        self.iEngine = insertionEngine()
+        # Subscribers
         self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
         self.image_sub = message_filters.Subscriber(RGB_TOPIC, Image)
         self.gps_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
@@ -36,14 +94,18 @@ class mapNode:
             k_time_sync_slop
             )
         self.all_sub.registerCallback(self.pc_im_callback)
-
-        self.projected_pub = rospy.Publisher(PROJECTED_TOPIC, PointCloud2)
-        self.rgb_pointcloud = np.zeros(0, dtype=[('x', float), ('y', float), ('z', float),
-                                    ('rgb', np.float32)])
-
-        self.first_msg = False
-        self.start_gps = None
-
+        self.im_insert_sub = message_filters.ApproximateTimeSynchronizer(
+            [self.image_sub, self.gps_sub], 
+            k_time_sync_queue_size, 
+            k_time_sync_slop
+            )
+        # self.im_insert_sub.registerCallback(self.insertion_im_callback)
+        data_path = os.path.join(rospack.get_path('hil'), 'experimentation', 'outdoor_bag_data', 'img')
+        img = cv2.imread(os.path.join(data_path, 'im_100.jpg'))
+        res_img = self.iEngine.render(img, (-5,0,0), (0,0,0))
+        # rospy.sleep(5)
+        cv2.imshow('res', res_img)
+        cv2.waitKey(0)
     def pc_im_callback(self, pc_msg: PointCloud2, img_msg: Image, gps_msg: Inspva):
         T_gps = np.eye(4)
         if not self.first_msg:
@@ -59,9 +121,15 @@ class mapNode:
             [np.sin(delTheta), np.cos(delTheta), 0],
             [0, 0, 1]
         ])
-        T_gps[:3,3] = [-dx,-dy,-dz]
-        self.curImage = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-
+        T_gps[:3,3] = [-dx,dy,dz]
+        q = tftrans.quaternion_about_axis(delTheta, (0,0,1))
+        t = (-dx, dy, dz)
+        self.br.sendTransform(
+            t, q, rospy.Time.now(), 'gps', 'lidar2'
+        )
+        # p = Pose(Point(-dx,-dy,-dz), Quaternion(q[0], q[1], q[2], q[3]))
+        self.markers.publishAxis(T_gps, 1, 0.1)
+        self.curImage = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='passthrough')
         orig_pc = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
         pts_depth = ros_numpy.point_cloud2.get_xyz_points(orig_pc, remove_nans=True)
         a = pts_depth.dtype.names
@@ -102,9 +170,45 @@ class mapNode:
         imgfov_pts = ros_numpy.point_cloud2.merge_rgb_fields(imgfov_pts)
         self.rgb_pointcloud = np.hstack((self.rgb_pointcloud, imgfov_pts))
         pc2_res = ros_numpy.point_cloud2.array_to_pointcloud2(self.rgb_pointcloud, stamp=rospy.Time.now(), frame_id='lidar2')
+
+        # T_cam = T_gps
+        # T_cam[2, 3] += 1.7
+        # cur_cam_world_pose = T_cam[:3,3]
+        # in_front_of_cam = cur_cam_world_pose
+        # in_front_of_cam[0] += 1
+        # in_front_of_cam = np.append(in_front_of_cam, 1)
+        # look_at_world_pose = T_cam @ in_front_of_cam
+        # res_img = self.iEngine.render(self.curImage, cur_cam_world_pose[:3], look_at_world_pose[:3])
+
+        # aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
+        # self.aug_im_publisher.publish(aug_img_msg)
+
         self.projected_pub.publish(pc2_res)
 
         self.first_msg = True
-
+    def insertion_im_callback(self, img_msg: Image, gps_msg: Inspva):
+        print("Received")
+        T_gps = np.eye(4)
+        if not self.first_msg:
+            self.start_gps = gps_msg
+        u1 = utm.from_latlon(gps_msg.latitude, gps_msg.longitude)
+        u2 = utm.from_latlon(self.start_gps.latitude, self.start_gps.longitude)
+        dy = u1[0]-u2[0]
+        dx = u1[1]-u2[1]
+        dz = gps_msg.height-self.start_gps.height
+        delTheta = -np.deg2rad(gps_msg.azimuth-self.start_gps.azimuth)
+        T_gps[:3,:3] = np.array([
+            [np.cos(delTheta), -np.sin(delTheta), 0],
+            [np.sin(delTheta), np.cos(delTheta), 0],
+            [0, 0, 1]
+        ])
+        T_gps[:3,3] = [-dx,dy,dz]
+        data_path = os.path.join(rospack.get_path('hil'), 'experimentation', 'outdoor_bag_data', 'img')
+        img = cv2.imread(os.path.join(data_path, 'im_100.jpg'))
+        res_img = self.iEngine.render(img, (-5,0,0), (0,0,0))
+        # rospy.sleep(5)
+        cv2.imshow('res', res_img)
+        cv2.waitKey(0)
+        self.first_msg = True
     def run(self):
         rospy.spin()

@@ -1,5 +1,10 @@
 *.bag
-.vscode/*
+*.jpg
+*.png
+*.npy
+*.npz
+*.obj
+.vscode/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

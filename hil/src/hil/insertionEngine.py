@@ -1,0 +1,211 @@
+"""Adapted from https://github.com/szabolcsdombi/headless-moderngl-experiment"""
+import moderngl as ModernGL
+from objloader import Obj
+from PIL import Image
+from pyrr import Matrix44
+import time
+import numpy as np
+import os
+import cv2
+
+# Global shader programs
+g_vertex_shader = """
+#version 330
+
+uniform mat4 Mvp;
+
+in vec3 in_vert;
+in vec3 in_norm;
+in vec3 in_text;
+
+out vec3 v_vert;
+out vec3 v_norm;
+out vec3 v_text;
+
+void main() {
+	v_vert = in_vert;
+	v_norm = in_norm;
+	v_text = in_text;
+	gl_Position = Mvp * vec4(v_vert, 1.0);
+}
+"""
+
+g_fragment_shader = """
+#version 330
+
+uniform sampler2D Texture;
+uniform vec4 Color;
+uniform vec3 Light;
+
+in vec3 v_vert;
+in vec3 v_norm;
+in vec3 v_text;
+
+out vec4 f_color;
+
+void main() {
+	float lum = dot(normalize(v_norm), normalize(v_vert - Light));
+	lum = acos(lum) / 3.14159265;
+	lum = clamp(lum, 0.0, 1.0);
+	lum = lum * lum;
+	lum = smoothstep(0.0, 1.0, lum);
+
+	lum *= smoothstep(0.0, 80.0, v_vert.z) * 0.3 + 0.7;
+
+	lum = lum * 0.8 + 0.2;
+
+	vec3 color = texture(Texture, v_text.xy).rgb;
+	color = color * (1.0 - Color.a) + Color.rgb * Color.a;
+	f_color = vec4(color * lum, 1.0);
+}
+"""
+
+class insertionEngine():
+    """
+    Represents a pipeline to insert a single 3D object into an image at a position in 3D world space
+    """
+    def __init__(self, obj_path: str, texture_path: str, is_online: bool = True) -> None:
+        """
+        Args: 
+            obj_path:  Path to a 3D object file (.obj)
+            texture_path: Path to a texture image for the input object
+            is_online: True if using this class inside a ros node, False otherwise
+        """
+        self.obj_path = obj_path
+        self.texture_path = texture_path
+        self.is_online = is_online
+
+        self.obj = Obj.open(obj_path)
+        self.vertex_data = self.obj.pack()
+        self.texture_image = Image.open(texture_path)    
+
+        # Perspective Projection Matrix based on zed2 specs from: 
+        # https://support.stereolabs.com/hc/en-us/articles/360007395634-What-is-the-camera-focal-length-and-field-of-view-
+        self.perspective = Matrix44.perspective_projection(72.0, 16.0/9.0, 0.28, 1000.0)
+
+        # Context creation
+        self.ctx = ModernGL.create_standalone_context()
+
+        # Shaders
+        self.prog = self.ctx.program(
+                vertex_shader=g_vertex_shader,
+                fragment_shader=g_fragment_shader
+        )
+        self.prog['Light'].value = (-140.0, -300.0, 350.0)
+        self.prog['Color'].value = (1.0, 1.0, 1.0, 0.25)
+
+        # Texture
+        self.texture = self.ctx.texture(self.texture_image.size, 3, self.texture_image.tobytes())
+        self.texture.build_mipmaps()
+
+        # Vertex Buffer and Vertex Array
+        self.vbo = self.ctx.buffer(self.vertex_data)
+        self.vao = self.ctx.simple_vertex_array(
+            self.prog, self.vbo, * ['in_vert', 'in_text', 'in_norm'])
+
+        # Framebuffers
+        self.fbo = self.ctx.framebuffer(
+            self.ctx.renderbuffer((1280, 720)),
+            self.ctx.depth_renderbuffer((1280, 720)),
+        )
+
+    def render(self, base_img: np.ndarray, 
+                    camera_pose: 'list[float]', 
+                    camera_look_at_pt: 'list[float]', 
+                    model_mat: np.ndarray):
+        """ Returns a rendering of the object at the given camera/model poses superimposed on the base image
+        Args:
+            base_img: input image
+            camera_pose: 3 element xyz camera pose
+            camera_look_at_pt: 3 element xyz pose of where the camera is looking
+            model_mat:  4x4 global transform for the inserted object pose, 
+                        note that the translation vector must be in the bottom row,
+                        instead of in the rightmost column
+        """
+        base_img = cv2.cvtColor(base_img, cv2.COLOR_BGR2RGB)
+        base_img = Image.fromarray(base_img)
+        lookat = Matrix44.look_at(
+            camera_pose,
+            camera_look_at_pt,
+            (0.0, 0.0, 1.0),
+        )
+
+        # Understanding mvp matrix: https://jsantell.com/model-view-projection/
+        mvp = self.perspective * lookat * model_mat
+        self.prog['Mvp'].write(mvp.astype('f4').tobytes())
+
+        # Rendering
+        self.fbo.use()
+        self.ctx.enable(ModernGL.DEPTH_TEST)
+        self.ctx.clear(0.9, 0.9, 0.9)
+        self.texture.use()
+        self.vao.render()
+        data = self.fbo.read(components=3, alignment=1)
+        img = Image.frombytes('RGB', self.fbo.size, data, 'raw', 'RGB', 0, -1)
+
+        # Placing rendered object pixels onto the input background image
+        thresh = 200
+        fn = lambda x : 255 if x > thresh else 0
+        mask = img.convert('L').point(fn, mode='1')
+        composite = Image.composite(base_img, img, mask)
+        res_img = cv2.cvtColor(np.array(composite.convert('RGB')), cv2.COLOR_RGB2BGR)
+        return res_img
+
+    def run_offline(self, extracted_bag_dir: str):
+        """ Runs object insertion on the given extracted bag directory path"""
+        if self.is_online:
+            raise ValueError("run_offline() cannot be called when class is initialized with `is_online=True`")
+        img_path = os.path.join(extracted_bag_dir, 'img')
+        pose_path = os.path.join(extracted_bag_dir, 'pose')
+        n = len(os.listdir(pose_path))
+
+        # This matrix defines the global pose where the obejct is placed in meters
+        model_mat= np.array([
+            [0,0.02,0,5.77],
+            [0.02,0,0,-21],
+            [0,0,0.02,-1.7],
+            [0,0,0,1]
+        ]).T    
+        total_render_time = 0
+        for iter in range(n):
+            start_time = time.time()
+
+            img = cv2.imread(os.path.join(img_path, f'im_{iter}.jpg'))
+            T_gps = np.load(os.path.join(pose_path, f'gps_{iter}.npy'))
+            T_cam = T_gps
+            T_cam[2, 3] += 1.7  # Estimated z-val adjustment since camera is higher than gps unit 
+            cur_cam_world_pose = T_cam[:3,3]
+            in_front_of_cam = np.array([1,0,0,1])
+            look_at_world_pose = T_cam @ in_front_of_cam
+            # print(np.linalg.norm(cur_cam_world_pose- look_at_world_pose[:3]))
+            res_img = self.render(img, cur_cam_world_pose, look_at_world_pose[:3], model_mat)
+            
+            total_render_time += time.time()-start_time
+            # print(f"iter {iter}: {time.time()-start_time} seconds")
+            cv2.imwrite(os.path.join(extracted_bag_dir, 'initial_insertion_results',f'inserted_im_{iter}.jpg'), res_img)
+            cv2.imshow('res', res_img)
+            cv2.waitKey(100)
+        print(f"Average render time: {total_render_time/n}")
+
+def main():
+    # import rospkg
+    # rospack = rospkg.RosPack()
+    # extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor_bag')
+    # model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
+
+    extracted_bag_dir = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/extracted_bags/outdoor_bag"
+    model_path = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/models"
+    obj_path = os.path.join(model_path, 'dummy.obj')
+    texture_path = os.path.join(model_path,'dummy.jpg')
+
+    iEngine = insertionEngine(
+        obj_path,
+        texture_path,
+        is_online=False
+    )
+
+    iEngine.run_offline(extracted_bag_dir)
+    print('Completed.')
+
+if __name__ == '__main__':
+    main()
