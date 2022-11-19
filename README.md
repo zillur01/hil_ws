@@ -8,11 +8,11 @@ Each main folder in the codebase is a separate [ros package](http://wiki.ros.org
 ### Folder Descriptions
 - `hil/` : holds main HIL research code
     - `data/` :  all input files, should primarily be populated with data from box
+        - `extracted_bags`: Bag messages converted into image files, pointcloud/transform numpy arrays, etc.
         - `GEM_rosbags/`: Rosbags recorded from the GEM vehicle 
-        - `Post-processed_bag`: 
         - `models/` : all 3d objects and textures
         - `scenes/` : tbd, but will likely be some json format description of different testing scenes(waypoints + animated objects + timestamps)
-        - `config.json` : Any future configuration settings
+        - `config.json` : tbd, any future configuration settings
     - `experimentation/` : random python notebooks and scripts
     - `launch/` : launch scripts that run multiple ros nodes together
     - `src/hil` : Main custom python module for all source code
