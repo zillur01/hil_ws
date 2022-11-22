@@ -1,14 +1,20 @@
-#!/usr/bin/env python3
-from hil import *
 import numpy as np
-from hil.mapNode import mapNode
+# Topic Names
 RGB_TOPIC = "/rgb"
 LIDAR_PC_TOPIC = "/cloud"
 CAMERA_INFO_TOPIC = "/camera_info"
 GPS_TOPIC = "/gps"
-PROJECTED_TOPIC = "/projected"
+VIS_MARKER_TOPIC = "/gps_vis_marker"
+OUTPUT_MAP_TOPIC = "/projected"
 
-T_depth_rgb = np.array([
+# Frame Names
+WORLD_FRAME = "world"
+GPS_FRAME = "gps"
+LIDAR_FRAME = "velodyne_lidar"
+CAMERA_FRAME = "zed2_camera"
+
+# Static Transforms
+T_lidar_rgb = np.array([
     [0, -1, 0, 0.2],
     [0, 0, -1, -0.19],
     [1, 0, 0, -0.15],
@@ -25,16 +31,3 @@ T_depth_rgb = np.array([
 #        [-0.04420422,  0.11300455,  0.99261068, -0.07585925],
 #        [ 0.        ,  0.        ,  0.        ,  1.        ]]) @ base_T_depth_rgb
 
-def main():
-    map_node = mapNode(
-        CAMERA_INFO_TOPIC,
-        LIDAR_PC_TOPIC,
-        RGB_TOPIC,
-        GPS_TOPIC,
-        PROJECTED_TOPIC,
-        T_depth_rgb
-    )
-    map_node.run()
-
-if __name__ == '__main__':
-    main()

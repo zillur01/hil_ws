@@ -1,15 +1,44 @@
 import rospy
 import tf
+import tf.transformations as tftrans
+
+import utm
+import numpy as np
+from novatel_gps_msgs.msg import Inspva
 
 from hil.utils import *
 k_tf_timeout = rospy.Duration(1) # timeout for waiting for a tf msg
 
-def get_tf(src_frame: str, dst_frame: str, tf_listener: tf.TransformListener, convertToTransform=True):
+def get_gps_tf(start_gps:Inspva, cur_gps: Inspva) -> 'tuple[np.ndarray, np.ndarray]':
+    """ Returns the (t,Q)=(translation, Quaternion) between start_gps and cur_gps
+        This transform describes the car's pose in our world coordinates
+    Args: 
+        start_gps: starting gps message of the car(treated as origin of our world coordinate space)
+        cur_gps: current gps message position
+    """
+    T_gps = np.eye(4)
+    u1 = utm.from_latlon(cur_gps.latitude, cur_gps.longitude)
+    u2 = utm.from_latlon(start_gps.latitude, start_gps.longitude)
+    dy = u1[0]-u2[0]
+    dx = u1[1]-u2[1]
+    dz = cur_gps.height-start_gps.height
+    delTheta = -np.deg2rad(cur_gps.azimuth-start_gps.azimuth)
+    # T_gps[:3,:3] = np.array([
+    #     [np.cos(delTheta), -np.sin(delTheta), 0],
+    #     [np.sin(delTheta), np.cos(delTheta), 0],
+    #     [0, 0, 1]
+    # ])
+    # T_gps[:3,3] = [-dx,dy,dz]
+    Q = tftrans.quaternion_about_axis(delTheta, (0,0,1))
+    t = (-dx, dy, dz)
+    return (t,Q)
+
+def get_tf(src_frame: str, dst_frame: str, tf_listener: tf.TransformListener, convertToTransform=True) -> 'tuple[np.ndarray, np.ndarray]':
     "Gets the transform from src to dst based on the /tf or /tf_static topic data"
     (t,Q) = None, None
     tf_listener.waitForTransform(dst_frame, src_frame, rospy.Time(), k_tf_timeout)  
     common_t = tf_listener.getLatestCommonTime(src_frame, dst_frame)
-    common_t = rospy.Time(0)
+    # common_t = rospy.Time(0)
 
     (t, Q) = tf_listener.lookupTransform(dst_frame, src_frame, common_t)
     if convertToTransform:

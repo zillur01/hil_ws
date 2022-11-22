@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-from hil import *
-from hil.calibrationNodes import arucoMappingNode
+from calibration.calibrationNodes import arucoMappingNode
 import numpy as np
-
-RGB_TOPIC = "/rgb"
-CAMERA_INFO_TOPIC = "/camera_info"
+from hil.globals import * 
 
 def main():
     desired_ids = [5, 11]

@@ -60,7 +60,7 @@ void main() {
 }
 """
 
-class insertionEngine():
+class insertionEngine:
     """
     Represents a pipeline to insert a single 3D object into an image at a position in 3D world space
     """

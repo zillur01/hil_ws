@@ -1,7 +1,9 @@
 import numpy as np
-import rospy
+import cv2
+import matplotlib.pyplot as plt
+import rospy, ros_numpy
 from sensor_msgs.msg import PointCloud2, CameraInfo, Image
-from tf.transformations import quaternion_matrix
+import tf.transformations as tftrans
 
 k_wait_msg_timeout = 10
 
@@ -13,10 +15,28 @@ def inverse_transform(T):
     inv_T[0:3, 3] = -R @ t 
     return inv_T
 
+def transform_to_tf(T):
+    t = T[:3,3]
+    Q = tftrans.quaternion_from_matrix(T)
+    return (t, Q)
+
 def tf_to_transform(trans, Q):
-    T = quaternion_matrix(Q)
+    T = tftrans.quaternion_matrix(Q)
     T[0:3, 3] = trans
     return T
+
+def applyTransform(pts_3d, T):
+    """
+    Apply the given transform to a set of points
+    Args:
+        pts_3d:     3D points [3, npoints]
+        T:  Transformation Matrix [4, 4]
+    """
+    num_pts = pts_3d.shape[0]
+    # Change to homogenous coordinates
+    pts_3d = np.vstack((pts_3d.T, np.ones(num_pts)))
+    points = T @ pts_3d
+    return points[:3].T
 
 def project_to_image(pts_3d, proj_mat, T_depth_rgb):
     """
@@ -31,18 +51,68 @@ def project_to_image(pts_3d, proj_mat, T_depth_rgb):
     points = proj_mat @ T_depth_rgb @ pts_3d
     points[:2, :] /= points[2, :]
     return points[:2, :], points[2, :]
-def applyTransform(pts_3d, T):
+
+def color_pointcloud(pts_depth: np.ndarray, cur_image: np.ndarray, 
+                    T_depth_rgb: np.ndarray, proj_mat: np.ndarray, 
+                    transform_pc=np.eye(4), visualize_projection=False):
+    """Adds rgb from cur_image to the pts_depth pointcloud within the fov of the camera
+    Args: 
+        pts_depth: 3D points in lidar pointcloud coordinate [3, npoints]
+        cur_image: input image in RGB byte order
+        T_depth_rgb: Homogenous transform between 3D depth points and camera frame [4,4]
+        proj_mat: Camera Projection matrix [3,4]
+        transform_pc (optional): Additional transformation to apply to the output 3D pointcloud
+        visualize_projection (optional): True if 3D point projected onto image should be visualized
+    Returns:
+        [4, ...] np.
     """
-    Apply the given transform to a set of points
-    Args:
-        pts_3d:     3D points [3, npoints]
-        T:  Transformation Matrix [4, 4]
-    """
-    num_pts = pts_3d.shape[0]
-    # Change to homogenous coordinates
-    pts_3d = np.vstack((pts_3d.T, np.ones(num_pts)))
-    points = T @ pts_3d
-    return points[:3].T
+    height, width, _ = cur_image.shape
+
+    pts_2d, depths = project_to_image(pts_depth, proj_mat, T_depth_rgb)
+    # Filter lidar points to be within image FOV
+    inds = np.where((pts_2d[0, :] < width) & (pts_2d[0, :] >= 0) &
+                    (pts_2d[1, :] < height) & (pts_2d[1, :] >= 0) &
+                    (depths > 0)
+                    )[0]
+    # Filter out pixels points
+    imgfov_pc_pixel = pts_2d[:, inds]
+    imgfov_pc_depth = depths[inds]
+
+    max_depth = np.max(imgfov_pc_depth)
+    filtered_pts_depth = applyTransform(pts_depth[inds], transform_pc)
+
+    # Build output colored pointcloud
+    imgfov_pts = np.zeros(filtered_pts_depth.shape[0], 
+                    dtype=[('x', float), ('y', float), ('z', float),
+                            ('b', int), ('g', int), ('r', int)])
+    imgfov_pts['x'] = filtered_pts_depth[:, 0]
+    imgfov_pts['y'] = filtered_pts_depth[:, 1]
+    imgfov_pts['z'] = filtered_pts_depth[:, 2]
+
+    x_pixels = imgfov_pc_pixel[0].astype(int)
+    y_pixels = imgfov_pc_pixel[1].astype(int)
+    rgb_pts = cur_image[y_pixels, x_pixels]
+    imgfov_pts['r'] = rgb_pts[:, 0]
+    imgfov_pts['g'] = rgb_pts[:, 1]
+    imgfov_pts['b'] = rgb_pts[:, 2]
+    imgfov_pts = ros_numpy.point_cloud2.merge_rgb_fields(imgfov_pts)
+
+    # Create color map and paint circles with color corresponding to depth
+    if visualize_projection:
+        max_depth = np.max(imgfov_pc_depth)
+        cmap = plt.cm.get_cmap('hsv', 256)
+        cmap = np.array([cmap(i) for i in range(256)])[:, :3] * 255
+        depth_map = np.clip(255* (imgfov_pc_depth/max_depth), 0, 255).astype(int)
+        # Paint lidar points onto the image 
+        depth_image = cur_image.copy()
+        depth_image[y_pixels, x_pixels] = cmap[depth_map]
+        
+        cv2.imshow("3D projected onto Image window", depth_image)
+        cv2.waitKey(1)
+    
+    return imgfov_pts
+
+
 def get_camera_info(topic_name: str)-> CameraInfo:
     cam_info = None
     try:

@@ -159,10 +159,12 @@ include_directories(
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
 catkin_install_python(PROGRAMS
-  project_gem_sim.py
+  insertion_node.py
+  lidar2cam_node.py
   aruco_markers.py
-  mapping.py
+  mapping_node.py
   saveData.py
+  publish_gps_pose.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

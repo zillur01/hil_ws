@@ -10,7 +10,7 @@
             /lidar1/velodyne_points:=/cloud 
             /zed2/zed_node/left/camera_info:=/camera_info
             /zed2/zed_node/left/image_rect_color:=/rgb --loop
-            --delay=2"
+            --delay=1"
   />
 <!-- 
   <node 
@@ -21,9 +21,9 @@
   /> -->
 
   <node 
-    name="gem_sim_projector" 
+    name="lidar2cam" 
     pkg="hil" 
-    type="project_gem_sim.py" 
+    type="lidar2cam_node.py" 
     output="screen"
   />
 
