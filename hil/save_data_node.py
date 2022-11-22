@@ -1,26 +1,26 @@
+#!/usr/bin/env python3
+import numpy as np
 import rospy
 import message_filters
-from sensor_msgs.msg import PointCloud2, CameraInfo, Image
+from sensor_msgs.msg import PointCloud2, Image
 import ros_numpy
 from cv_bridge import CvBridge
 import cv2
-import matplotlib.pyplot as plt
 from hil.utils import *
 from hil.tf_funcs import *
+from hil.globals import *
 import rospkg
 import os
-from novatel_gps_msgs.msg import Inspva
-import utm
 
 rospack = rospkg.RosPack()
 
 k_time_sync_queue_size = 10
-k_time_sync_slop = 0.01 # allowed difference in seconds between messages to sync
+k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 
 class saveDataNode:
-    def __init__(self, CAMERA_INFO_TOPIC, LIDAR_PC_TOPIC, RGB_TOPIC, GPS_TOPIC):
+    def __init__(self, extracted_bag_name):
         rospy.init_node('saveData', anonymous=True)
-        self.fileDir = os.path.join(rospack.get_path('hil'), 'experimentation', 'outdoor_bag')
+        self.fileDir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', extracted_bag_name)
         self.img_path = os.path.join(self.fileDir, 'img')
         self.pc_path = os.path.join(self.fileDir, 'pc')
         self.pose_path = os.path.join(self.fileDir, 'pose')
@@ -43,34 +43,19 @@ class saveDataNode:
         
         self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
         self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
-        self.gps_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
         self.pc_im_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.pc_sub, self.image_sub, self.gps_sub], 
+            [self.pc_sub, self.image_sub], 
             k_time_sync_queue_size, 
             k_time_sync_slop
             )
         self.pc_im_sub.registerCallback(self.pc_im_callback)
         self.iter = 0
-        self.first_msg = False
 
-    def pc_im_callback(self, pc_msg: PointCloud2, img_msg: Image, gps_msg: Inspva ):
-        T_gps = np.eye(4)
-        if not self.first_msg:
-            self.start_gps = gps_msg
-            self.first_msg = True
+        self.tf_listener = tf.TransformListener()
 
-        u1 = utm.from_latlon(gps_msg.latitude, gps_msg.longitude)
-        u2 = utm.from_latlon(self.start_gps.latitude, self.start_gps.longitude)
-        dy = u1[0]-u2[0]
-        dx = u1[1]-u2[1]
-        dz = gps_msg.height-self.start_gps.height
-        delTheta = -np.deg2rad(gps_msg.azimuth-self.start_gps.azimuth)
-        T_gps[:3,:3] = np.array([
-            [np.cos(delTheta), -np.sin(delTheta), 0],
-            [np.sin(delTheta), np.cos(delTheta), 0],
-            [0, 0, 1]
-        ])
-        T_gps[:3,3] = [-dx,dy,dz]
+    def pc_im_callback(self, pc_msg: PointCloud2, img_msg: Image ):
+        T_gps = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, convertToTransform=True)
+
         self.curImage = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
         pts_depth = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
 
@@ -80,3 +65,15 @@ class saveDataNode:
         self.iter += 1
     def run(self):
         rospy.spin()
+
+def main():
+    node_name = "save_data_node"
+    param_name = "rosbag_filename"
+    bag_filename = rospy.get_param(f'{node_name}/{param_name}')
+    bag_filename = bag_filename.split('.')[0]
+    node = saveDataNode(bag_filename)
+    node.run()
+    print("DOne")
+
+if __name__ == '__main__':
+    main()

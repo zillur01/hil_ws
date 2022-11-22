@@ -66,15 +66,6 @@ class mapNode:
 
         self.tf_listener = tf.TransformListener()
 
-        # Image Insertion
-        # model_mat2 = np.array([
-        #     [0,0.02,0,9],
-        #     [0.02,0,0,0],
-        #     [0,0,0.02,-1.7],
-        #     [0,0,0,1]
-        # ]).T
-        # self.iEngine = insertionEngine()
-        # Subscribers
         self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
         self.image_sub = message_filters.Subscriber(RGB_TOPIC, Image)
         self.all_sub = message_filters.ApproximateTimeSynchronizer(
@@ -103,43 +94,6 @@ class mapNode:
         pc2_res = ros_numpy.point_cloud2.array_to_pointcloud2(self.rgb_pointcloud, stamp=rospy.Time.now(), frame_id=WORLD_FRAME)
         self.projected_pub.publish(pc2_res)
 
-        # T_cam = T_gps
-        # T_cam[2, 3] += 1.7
-        # cur_cam_world_pose = T_cam[:3,3]
-        # in_front_of_cam = cur_cam_world_pose
-        # in_front_of_cam[0] += 1
-        # in_front_of_cam = np.append(in_front_of_cam, 1)
-        # look_at_world_pose = T_cam @ in_front_of_cam
-        # res_img = self.iEngine.render(self.curImage, cur_cam_world_pose[:3], look_at_world_pose[:3])
-
-        # aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
-        # self.aug_im_publisher.publish(aug_img_msg)
-
-
-    # def insertion_im_callback(self, img_msg: Image, gps_msg: Inspva):
-    #     print("Received")
-    #     T_gps = np.eye(4)
-    #     if not self.first_msg:
-    #         self.start_gps = gps_msg
-    #     u1 = utm.from_latlon(gps_msg.latitude, gps_msg.longitude)
-    #     u2 = utm.from_latlon(self.start_gps.latitude, self.start_gps.longitude)
-    #     dy = u1[0]-u2[0]
-    #     dx = u1[1]-u2[1]
-    #     dz = gps_msg.height-self.start_gps.height
-    #     delTheta = -np.deg2rad(gps_msg.azimuth-self.start_gps.azimuth)
-    #     T_gps[:3,:3] = np.array([
-    #         [np.cos(delTheta), -np.sin(delTheta), 0],
-    #         [np.sin(delTheta), np.cos(delTheta), 0],
-    #         [0, 0, 1]
-    #     ])
-    #     T_gps[:3,3] = [-dx,dy,dz]
-    #     data_path = os.path.join(rospack.get_path('hil'), 'experimentation', 'outdoor_bag_data', 'img')
-    #     img = cv2.imread(os.path.join(data_path, 'im_100.jpg'))
-    #     res_img = self.iEngine.render(img, (-5,0,0), (0,0,0))
-    #     # rospy.sleep(5)
-    #     cv2.imshow('res', res_img)
-    #     cv2.waitKey(0)
-    #     self.first_msg = True
     def run(self):
         rospy.spin()
 

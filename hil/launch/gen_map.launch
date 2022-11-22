@@ -4,18 +4,12 @@
     name="play" 
     pkg="rosbag" 
     type="play" 
-    args="$(find hil)/data/GEM_rosbags/sensor.bag
+    args="$(find hil)/data/GEM_rosbags/outdoor1.bag
             --clock
             --delay=1"
   />
 
-  <node name="gps_transformer" pkg="hil" 
-    type="publish_gps_pose.py" output="log">
-    <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
-    <remap from="/cloud" to="/lidar1/velodyne_points"/>
-    <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
-    <remap from="/gps" to="/novatel/inspva"/>
-  </node>
+  <include file="$(find hil)/launch/base.launch" />
 
   <node name="map_generation" pkg="hil" 
     type="mapping_node.py">

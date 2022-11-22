@@ -1,0 +1,25 @@
+<launch>
+  <arg name="rosbag_filename" default="sensor.bag"/>
+  <param name="/use_sim_time" value="true"/>
+  <node
+    name="play" 
+    pkg="rosbag" 
+    type="play" 
+    args="$(find hil)/data/GEM_rosbags/$(arg rosbag_filename)
+            --clock
+            --delay=1"
+  />
+
+  <include file="$(find hil)/launch/base.launch"/>
+
+  <node 
+    name="save_data_node" pkg="hil" 
+    type="save_data_node.py" output="screen">
+    <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
+    <remap from="/cloud" to="/lidar1/velodyne_points"/>
+    <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
+    <remap from="/gps" to="/novatel/inspva"/>
+    <param name="rosbag_filename" value="$(arg rosbag_filename)" /> 
+   </node>
+
+</launch>

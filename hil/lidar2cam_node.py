@@ -37,7 +37,7 @@ class lidar2camNode:
         self.projected_pub = rospy.Publisher(OUTPUT_MAP_TOPIC, PointCloud2)
 
     def pc_im_callback(self, pc_msg: PointCloud2, img_msg: Image, ):
-        self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
+        self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
 
         orig_pc = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
         pts_depth = ros_numpy.point_cloud2.get_xyz_points(orig_pc, remove_nans=True)

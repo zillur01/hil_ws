@@ -163,8 +163,8 @@ catkin_install_python(PROGRAMS
   lidar2cam_node.py
   aruco_markers.py
   mapping_node.py
-  saveData.py
-  publish_gps_pose.py
+  save_data_node.py
+  gps_tf_pub_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -157,6 +157,9 @@ class insertionEngine:
             raise ValueError("run_offline() cannot be called when class is initialized with `is_online=True`")
         img_path = os.path.join(extracted_bag_dir, 'img')
         pose_path = os.path.join(extracted_bag_dir, 'pose')
+        output_dir = os.path.join(extracted_bag_dir, 'initial_insertion_results')
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
         n = len(os.listdir(pose_path))
 
         # This matrix defines the global pose where the obejct is placed in meters
@@ -170,7 +173,7 @@ class insertionEngine:
         for iter in range(n):
             start_time = time.time()
 
-            img = cv2.imread(os.path.join(img_path, f'im_{iter}.jpg'))
+            img = cv2.imread(os.path.join(img_path, f'im_{iter}.png'))
             T_gps = np.load(os.path.join(pose_path, f'gps_{iter}.npy'))
             T_cam = T_gps
             T_cam[2, 3] += 1.7  # Estimated z-val adjustment since camera is higher than gps unit 
@@ -182,19 +185,19 @@ class insertionEngine:
             
             total_render_time += time.time()-start_time
             # print(f"iter {iter}: {time.time()-start_time} seconds")
-            cv2.imwrite(os.path.join(extracted_bag_dir, 'initial_insertion_results',f'inserted_im_{iter}.jpg'), res_img)
+            cv2.imwrite(os.path.join(output_dir,f'inserted_im_{iter}.png'), res_img)
             cv2.imshow('res', res_img)
-            cv2.waitKey(100)
+            cv2.waitKey(10)
         print(f"Average render time: {total_render_time/n}")
 
 def main():
-    # import rospkg
-    # rospack = rospkg.RosPack()
-    # extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor_bag')
-    # model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
+    import rospkg
+    rospack = rospkg.RosPack()
+    extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor1')
+    model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
 
-    extracted_bag_dir = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/extracted_bags/outdoor_bag"
-    model_path = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/models"
+    # extracted_bag_dir = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/extracted_bags/outdoor1"
+    # model_path = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/models"
     obj_path = os.path.join(model_path, 'dummy.obj')
     texture_path = os.path.join(model_path,'dummy.jpg')
 
