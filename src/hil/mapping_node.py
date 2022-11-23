@@ -9,8 +9,6 @@ import hil.utils as ut
 from hil.tf_funcs import *
 from hil.globals import *
 import tf
-import os
-import open3d as o3d
 import rospkg
 
 rospack = rospkg.RosPack()
@@ -35,34 +33,6 @@ class mapNode:
 
         self.rgb_pointcloud = np.zeros(0, dtype=[('x', float), ('y', float), ('z', float),
                                     ('rgb', np.float32)])
-
-        # Pointcloud Insertion
-        self.model_path = os.path.join(rospack.get_path('hil'), 'data', 'models', "dummy.obj")
-        tri_mesh = o3d.io.read_triangle_mesh(self.model_path)
-        nPoints = 5000
-        pc = tri_mesh.sample_points_poisson_disk(nPoints)
-        model_pc = np.asarray(pc.points)
-        model_mat = np.array([
-            [0,0.02,0,5.77],
-            [0.02,0,0,-21],
-            [0,0,0.02,-1.7],
-            [0,0,0,1]
-        ])
-        scale_mat = np.diag([1,1,1,1])
-        model_pc = ut.applyTransform(model_pc, model_mat @ scale_mat)
-        model_pts = np.zeros(model_pc.shape[0], 
-                        dtype=[('x', float), ('y', float), ('z', float),
-                                ('b', int), ('g', int), ('r', int)])
-        model_pts['x'] = model_pc[:, 0]
-        model_pts['y'] = model_pc[:, 1]
-        model_pts['z'] = model_pc[:, 2]
-
-        model_pts['r'] = np.full_like(model_pc[:,0], 255)
-        model_pts['g'] = np.full_like(model_pc[:,0], 0)
-        model_pts['b'] = np.full_like(model_pc[:,0], 0)
-        model_pts = ros_numpy.point_cloud2.merge_rgb_fields(model_pts)
-
-        self.rgb_pointcloud = np.hstack((self.rgb_pointcloud, model_pts))
 
         self.tf_listener = tf.TransformListener()
 

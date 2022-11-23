@@ -1,0 +1,10 @@
+numpy
+# Insertion Requirements
+objloader
+moderngl
+pillow
+pyrr
+opencv-python
+matplotlib
+# GPS code Requirements
+utm

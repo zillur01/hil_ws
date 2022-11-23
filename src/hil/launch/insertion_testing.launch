@@ -4,12 +4,12 @@
     name="play" 
     pkg="rosbag" 
     type="play" 
-    args="$(find hil)/data/GEM_rosbags/sensor.bag
+    args="$(find hil)/data/GEM_rosbags/outdoor1.bag
             --clock
             --delay=1"
   />
 
-  <include file="$(find hil)/launch/base.launch" clear_params="true" />
+  <include file="$(find hil)/launch/base.launch"/>
 
   <node name="insertion" pkg="hil" 
     type="insertion_node.py">
