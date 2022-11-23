@@ -26,11 +26,6 @@ LABEL maintainer="Ignacio Vizzo <ignaciovizzo@gmail.com>"
 RUN sudo apt-get update
 RUN sudo apt-get install -y rsync
 
-RUN sudo apt-get update -y
-RUN sudo apt install libgl1-mesa-glx -y
-RUN sudo apt-get install 'ffmpeg'\
-    'libsm6'\
-    'libxext6'  -y
 # ROS Dependencies
 # RUN rosdep update
 # RUN rosdep install --from-paths src --ignore-src -r

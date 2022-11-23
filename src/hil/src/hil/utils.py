@@ -64,7 +64,8 @@ def color_pointcloud(pts_depth: np.ndarray, cur_image: np.ndarray,
         transform_pc (optional): Additional transformation to apply to the output 3D pointcloud
         visualize_projection (optional): True if 3D point projected onto image should be visualized
     Returns:
-        [4, ...] np.
+        imgfov_pts[4,...] if visualize_projection=False
+        imgfov_pts[4,...], visualized_im if visualization=True
     """
     height, width, _ = cur_image.shape
 
@@ -106,9 +107,9 @@ def color_pointcloud(pts_depth: np.ndarray, cur_image: np.ndarray,
         # Paint lidar points onto the image 
         depth_image = cur_image.copy()
         depth_image[y_pixels, x_pixels] = cmap[depth_map]
-        
-        cv2.imshow("3D projected onto Image window", depth_image)
-        cv2.waitKey(1)
+        return imgfov_pts, depth_image
+        # cv2.imshow("3D projected onto Image window", depth_image)
+        # cv2.waitKey(1)
     
     return imgfov_pts
 

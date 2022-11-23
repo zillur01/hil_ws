@@ -24,10 +24,10 @@ CONTAINER_NAME?=noetic
 export CONTAINER_NAME
 
 default:build
-	@docker-compose run --rm ros tmuxinator --device=/dev/dri:/dev/dri --privileged
+	@docker-compose run --rm ros tmuxinator
 
 dev:
-	@docker-compose run --rm ros tmuxinator --device=/dev/dri:/dev/dri
+	@docker-compose run --rm ros tmuxinator
 
 build:
 	@docker-compose run --rm ros catkin init 

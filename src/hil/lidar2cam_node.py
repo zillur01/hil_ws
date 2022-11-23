@@ -23,7 +23,7 @@ class lidar2camNode:
         # self.T_depth_rgb = get_tf('velodyne', 'front_single_camera_link', listener, convertToTransform=True)
 
         self.bridge = CvBridge()
-        self.curImage = None
+        self.cur_image = None
         
         self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
         self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
@@ -35,13 +35,16 @@ class lidar2camNode:
         self.pc_im_sub.registerCallback(self.pc_im_callback)
 
         self.projected_pub = rospy.Publisher(OUTPUT_MAP_TOPIC, PointCloud2)
+        self.im_vis_pub = rospy.Publisher("/projected_vis", Image)
+
+        self.visualized_img = None
 
     def pc_im_callback(self, pc_msg: PointCloud2, img_msg: Image, ):
         self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
 
         orig_pc = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
         pts_depth = ros_numpy.point_cloud2.get_xyz_points(orig_pc, remove_nans=True)
-        imgfov_pts = ut.color_pointcloud(
+        imgfov_pts, self.visualized_img = ut.color_pointcloud(
                     pts_depth, self.cur_image, 
                     T_lidar_rgb, self.P,
                     visualize_projection=True
@@ -51,7 +54,12 @@ class lidar2camNode:
         self.projected_pub.publish(pc2_res)
 
     def run(self):
-        rospy.spin()
+        r = rospy.Rate(10) # 10hz 
+        while not rospy.is_shutdown():
+            if self.cur_image is not None:
+                vis_img_msg = self.bridge.cv2_to_imgmsg(self.visualized_img)
+                self.im_vis_pub.publish(vis_img_msg)
+            r.sleep()
 
 def main():
     node = lidar2camNode()
