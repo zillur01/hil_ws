@@ -11,7 +11,10 @@
 3. `make` or `make dev`: starts the container, builds the ros packages in `src/`, and opens up a tmux environment.
 4. Download the desired data from box. See [Data Setup](https://github.com/bchandaka/HIL_Research/edit/main/README.md#data-setup)
 5. In the `ros` window in tmux, you can run any ros/python scripts from a terminal inside the container.
+   - Ex. `roslaunch hil insertion_testing.launch`
+   
 *See the `Makefile` for other command shortcuts*
+
 *Depending on your feature, you may not even need ros or the docker container to do your intial work and can just work in python directly since we can integrate it into ros later. See the example below.
 ### Example running standalone insertion code with python
 1. Download the desired data from box. See [Data Setup](https://github.com/bchandaka/HIL_Research/edit/main/README.md#data-setup)
