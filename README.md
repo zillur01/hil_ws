@@ -21,7 +21,7 @@
   - You will need to populate at least the `extracted_bags/outdoor1/` and `models/` folders from box to run the insertion code
 2. `pip install -r requirements.txt`
 3. You may need to change the absolute paths/ros-based paths on lines 196-199 in insertionEngine.py to reflect the correct extracted data and model/texture paths
-4. `cd hil/src/hil && python insertionEngine.py`
+4. `cd src/hil/src/hil && python insertionEngine.py`
 ## Data Setup
 - A box folder with recorded data and model files mirrors the structure of the `src/HIL_Research/hil/data/` folder
 - Download desired data from the `data/` folder in [box storage](https://uofi.box.com/s/ivdfygn9meyj8cjahn5d5j6hd570sjz8) into the respective subfolder
