@@ -193,8 +193,10 @@ class insertionEngine:
 def main():
     import rospkg
     rospack = rospkg.RosPack()
-    extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor1')
-    model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
+    # extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor1')
+    # model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
+    extracted_bag_dir = os.path.join('../../', 'data', 'extracted_bags', 'outdoor1')
+    model_path = os.path.join('../../', 'data', 'models')
 
     # extracted_bag_dir = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/extracted_bags/outdoor1"
     # model_path = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/models"
