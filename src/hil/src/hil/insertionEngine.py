@@ -9,6 +9,10 @@ import os
 import cv2
 import pickle
 import imageio
+import utm
+from scipy.spatial.transform import Rotation as R
+from tqdm import tqdm
+import vedo
 
 # Global shader programs
 g_vertex_shader = """
@@ -112,28 +116,18 @@ class insertionEngine:
         )
 
     def render(self, base_img: np.ndarray, 
-                    camera_pose: 'list[float]', 
-                    camera_look_at_pt: 'list[float]', 
+                    projection: np.ndarray,
+                    world2cam: np.ndarray,
                     model_mat: np.ndarray):
         """ Returns a rendering of the object at the given camera/model poses superimposed on the base image
         Args:
             base_img: input image
-            camera_pose: 3 element xyz camera pose
-            camera_look_at_pt: 3 element xyz pose of where the camera is looking
-            model_mat:  4x4 global transform for the inserted object pose, 
-                        note that the translation vector must be in the bottom row,
-                        instead of in the rightmost column
         """
         base_img = cv2.cvtColor(base_img, cv2.COLOR_BGR2RGB)
         base_img = Image.fromarray(base_img)
-        lookat = Matrix44.look_at(
-            camera_pose,
-            camera_look_at_pt,
-            (0.0, 0.0, 1.0),
-        )
 
         # Understanding mvp matrix: https://jsantell.com/model-view-projection/
-        mvp = self.perspective * lookat * model_mat
+        mvp = projection * world2cam * model_mat
         self.prog['Mvp'].write(mvp.astype('f4').tobytes())
 
         # Rendering
@@ -157,40 +151,126 @@ class insertionEngine:
         """ Runs object insertion on the given extracted bag directory path"""
         if self.is_online:
             raise ValueError("run_offline() cannot be called when class is initialized with `is_online=True`")
-        img_path = os.path.join(extracted_bag_dir, 'img')
-        pose_path = os.path.join(extracted_bag_dir, 'pose')
-        output_dir = os.path.join(extracted_bag_dir, 'initial_insertion_results')
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
-        n = len(os.listdir(pose_path))
+        img_dir = os.path.join(extracted_bag_dir, 'img')
+        gps_dir = os.path.join(extracted_bag_dir, 'raw_gps')
+        output_dir = os.path.join(extracted_bag_dir, 'insertion_output')
+        os.makedirs(output_dir, exist_ok=True)
 
+        n_frames = len([i for i in os.listdir(img_dir)])
+        img_paths = [os.path.join(img_dir, f'im_{i}.png') for i in range(n_frames)]
+        poses = calculate_poses(gps_dir)
         # This matrix defines the global pose where the obejct is placed in meters
+        scale = 0.03
+        shift = [4.0, 6.0, 0.0]
         model_mat= np.array([
-            [0,0.02,0,5.77],
-            [0.02,0,0,-21],
-            [0,0,0.02,-1.7],
-            [0,0,0,1]
+            [  scale,   0.0,   0.0,    shift[0]],
+            [  0.0,     scale, 0.0,    shift[1]],
+            [  0.0,     0.0,   scale,  shift[2]],
+            [  0.0,     0.0,   0.0,    1.0]
         ]).T    
-        total_render_time = 0
-        for iter in range(n):
-            start_time = time.time()
 
-            img = cv2.imread(os.path.join(img_path, f'im_{iter}.png'))
-            T_gps = np.load(os.path.join(pose_path, f'gps_{iter}.npy'))
-            T_cam = T_gps
-            T_cam[2, 3] += 1.7  # Estimated z-val adjustment since camera is higher than gps unit 
-            cur_cam_world_pose = T_cam[:3,3]
-            in_front_of_cam = np.array([1,0,0,1])
-            look_at_world_pose = T_cam @ in_front_of_cam
-            # print(np.linalg.norm(cur_cam_world_pose- look_at_world_pose[:3]))
-            res_img = self.render(img, cur_cam_world_pose, look_at_world_pose[:3], model_mat)
+        permute = np.array([
+            [0, 1, 0, 0],
+            [1, 0, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+        model_mat = permute @ model_mat
+
+        frames = []
+        total_render_time = 0
+        for i in tqdm(range(n_frames)):
+            start_time = time.time()
+            img = cv2.imread(img_paths[i])
+            world2cam_gl = poses[i].T
+            res_img = self.render(img, self.perspective, world2cam_gl, model_mat)
             
             total_render_time += time.time()-start_time
-            # print(f"iter {iter}: {time.time()-start_time} seconds")
-            cv2.imwrite(os.path.join(output_dir,f'inserted_im_{iter}.png'), res_img)
-            cv2.imshow('res', res_img)
-            cv2.waitKey(10)
-        print(f"Average render time: {total_render_time/n}")
+            cv2.imwrite(os.path.join(output_dir,'{:0>3d}.png'.format(i)), res_img)
+            frames.append(res_img)
+
+        frames = np.array(frames)
+        imageio.mimsave(os.path.join(output_dir, 'video.mp4'),
+                        frames[:, :, :, [2,1,0]], fps=30, macro_block_size=1)
+        print(f"Average render time: {total_render_time/n_frames}")
+
+def calculate_poses(gps_dir):
+    '''
+    Calculate world2cam matrix in OpenGL convention
+    gps data format:
+        cur_gps.latitude, 
+        cur_gps.longitude,
+        cur_gps.height,
+        cur_gps.roll,
+        cur_gps.pitch,
+        cur_gps.azimuth
+    coordinate definition:
+        x: east
+        y: north
+        z: up (the opposite of gravity)
+    '''
+    n_frames = len([i for i in os.listdir(gps_dir)])
+    gps_paths = [os.path.join(gps_dir, 'raw_gps_{}.npy'.format(i)) for i in range(n_frames)]
+    gps_data = np.stack([np.load(path) for path in gps_paths])
+    lat = gps_data[:, 0]
+    lon = gps_data[:, 1]
+    height = gps_data[:, 2]
+    roll = gps_data[:, 3] # y, right-handed
+    pitch = gps_data[:, 4] # x, right-handed 
+    azimuth = gps_data[:, 5] # z, left-handed
+
+    utm_data = utm.from_latlon(lat, lon)
+    east, north = utm_data[0], utm_data[1]
+    
+    # normalize positions, center at (0, 0, 0)
+    east -= east.mean()
+    north -= north.mean()
+    height -= height.mean()
+    pos = np.stack([east, north, height]).T # position (n, 3)
+
+    euler = np.stack([pitch, roll, azimuth]).T 
+    r = R.from_euler('xyz', euler, degrees=True)
+    rot = r.as_matrix() # (n, 3, 3) 
+    # row-based x: right, y: forward, z: up
+    # [OpenGL]  x: right, y: up,      z: backward
+    trans = np.array([
+        [1, 0, 0], 
+        [0, 0, 1], 
+        [0,-1, 0]
+    ])
+    r_gl = trans[None] @ rot
+
+    # visualize_cameras(r_gl, pos, arrow_len=1)
+    
+    world2cam_gl = np.zeros((n_frames, 4, 4))
+    world2cam_gl[:, -1, -1] = 1
+    world2cam_gl[:, :3, :3] = r_gl
+    t = r_gl @ -np.expand_dims(pos, -1)
+    world2cam_gl[:, :3, -1] = np.squeeze(t, -1)
+    return world2cam_gl
+
+def visualize_cameras(
+    R,
+    pos,
+    arrow_len=1,
+    s=1
+):  
+    '''
+    get vedo object representing cameras 
+    R, T: world2camera transform
+    x: green, y: blue, z: red
+    '''
+    vec_x = R[:, 0]
+    vec_y = R[:, 1]
+    vec_z = R[:, 2]
+    x_end = pos + vec_x * arrow_len
+    y_end = pos + vec_y * arrow_len
+    z_end = pos + vec_z * arrow_len
+
+    x = vedo.Arrows(pos, x_end, s=s, c='green')
+    y = vedo.Arrows(pos, y_end, s=s, c='blue')
+    z = vedo.Arrows(pos, z_end, s=s, c='red')
+    vedo.show([x, y, z], axes=1)
 
 class insertionEngine2:
     """
@@ -244,11 +324,6 @@ class insertionEngine2:
         """ Returns a rendering of the object at the given camera/model poses superimposed on the base image
         Args:
             base_img: input image
-            camera_pose: 3 element xyz camera pose
-            camera_look_at_pt: 3 element xyz pose of where the camera is looking
-            model_mat:  4x4 global transform for the inserted object pose, 
-                        note that the translation vector must be in the bottom row,
-                        instead of in the rightmost column
         """
         base_img = cv2.cvtColor(base_img, cv2.COLOR_BGR2RGB)
         base_img = Image.fromarray(base_img)
@@ -356,6 +431,8 @@ def get_world2cam(cam2world):
 def cv2gl(trans):
     '''
     Convert transformation matrix from opencv to opengl
+    [OpenCV] x: right, y: down, z: forward
+    [OpenGL] x: right, y: up,   z: backward
     '''
     convert = np.array([
         [1,  0,  0,  0], 
@@ -371,7 +448,7 @@ def main():
     rospack = rospkg.RosPack()
     # extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor1')
     # model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
-    extracted_bag_dir = os.path.join('../../', 'data', 'playground')
+    extracted_bag_dir = os.path.join('../../', 'data', 'extracted_bags/outdoor1_w_raw_gps_depth')
     model_path = os.path.join('../../', 'data', 'models')
 
     # extracted_bag_dir = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/extracted_bags/outdoor1"
@@ -379,7 +456,7 @@ def main():
     obj_path = os.path.join(model_path, 'dummy.obj')
     texture_path = os.path.join(model_path,'dummy.jpg')
 
-    iEngine = insertionEngine2(
+    iEngine = insertionEngine(
         obj_path,
         texture_path,
         is_online=False
