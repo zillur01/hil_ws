@@ -2,7 +2,9 @@ build/
 devel/
 logs/
 .catkin_tools/
-colmap
+colmap/
+data/
+
 
 *.bag
 *.jpg

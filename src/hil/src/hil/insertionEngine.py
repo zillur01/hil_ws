@@ -7,6 +7,8 @@ import time
 import numpy as np
 import os
 import cv2
+import pickle
+import imageio
 
 # Global shader programs
 g_vertex_shader = """
@@ -190,12 +192,186 @@ class insertionEngine:
             cv2.waitKey(10)
         print(f"Average render time: {total_render_time/n}")
 
+class insertionEngine2:
+    """
+    Represents a pipeline to insert a single 3D object into an image at a position in 3D world space
+    """
+    def __init__(self, obj_path: str, texture_path: str, is_online: bool = True) -> None:
+        """
+        Args: 
+            obj_path:  Path to a 3D object file (.obj)
+            texture_path: Path to a texture image for the input object
+            is_online: True if using this class inside a ros node, False otherwise
+        """
+        self.obj_path = obj_path
+        self.texture_path = texture_path
+        self.is_online = is_online
+
+        self.obj = Obj.open(obj_path)
+        self.vertex_data = self.obj.pack()
+        self.texture_image = Image.open(texture_path)    
+
+        # Context creation
+        self.ctx = ModernGL.create_standalone_context()
+
+        # Shaders
+        self.prog = self.ctx.program(
+                vertex_shader=g_vertex_shader,
+                fragment_shader=g_fragment_shader
+        )
+        self.prog['Light'].value = (-140.0, -300.0, 350.0)
+        self.prog['Color'].value = (1.0, 1.0, 1.0, 0.25)
+
+        # Texture
+        self.texture = self.ctx.texture(self.texture_image.size, 3, self.texture_image.tobytes())
+        self.texture.build_mipmaps()
+
+        # Vertex Buffer and Vertex Array
+        self.vbo = self.ctx.buffer(self.vertex_data)
+        self.vao = self.ctx.simple_vertex_array(
+            self.prog, self.vbo, * ['in_vert', 'in_text', 'in_norm'])
+
+        # Framebuffers
+        self.fbo = self.ctx.framebuffer(
+            self.ctx.renderbuffer((1008, 548)),
+            self.ctx.depth_renderbuffer((1008, 548)),
+        )
+
+    def render(self, base_img: np.ndarray, 
+                    projection: np.ndarray,
+                    world2cam: np.ndarray,
+                    model_mat: np.ndarray):
+        """ Returns a rendering of the object at the given camera/model poses superimposed on the base image
+        Args:
+            base_img: input image
+            camera_pose: 3 element xyz camera pose
+            camera_look_at_pt: 3 element xyz pose of where the camera is looking
+            model_mat:  4x4 global transform for the inserted object pose, 
+                        note that the translation vector must be in the bottom row,
+                        instead of in the rightmost column
+        """
+        base_img = cv2.cvtColor(base_img, cv2.COLOR_BGR2RGB)
+        base_img = Image.fromarray(base_img)
+
+        # Understanding mvp matrix: https://jsantell.com/model-view-projection/
+        mvp = projection * world2cam * model_mat
+        self.prog['Mvp'].write(mvp.astype('f4').tobytes())
+
+        # Rendering
+        self.fbo.use()
+        self.ctx.enable(ModernGL.DEPTH_TEST)
+        self.ctx.clear(0.9, 0.9, 0.9)
+        self.texture.use()
+        self.vao.render()
+        data = self.fbo.read(components=3, alignment=1)
+        img = Image.frombytes('RGB', self.fbo.size, data, 'raw', 'RGB', 0, -1)
+
+        # Placing rendered object pixels onto the input background image
+        thresh = 200
+        fn = lambda x : 255 if x > thresh else 0
+        mask = img.convert('L').point(fn, mode='1')
+        composite = Image.composite(base_img, img, mask)
+        res_img = cv2.cvtColor(np.array(composite.convert('RGB')), cv2.COLOR_RGB2BGR)
+        return res_img
+
+    def run_offline(self, extracted_bag_dir: str):
+        """ Runs object insertion on the given extracted bag directory path"""
+        if self.is_online:
+            raise ValueError("run_offline() cannot be called when class is initialized with `is_online=True`")
+        dir_img = os.path.join(extracted_bag_dir, 'imgs')
+        img_paths = sorted([os.path.join(dir_img, file) for file in os.listdir(dir_img)])
+
+        pose_path = os.path.join(extracted_bag_dir, 'poses.pkl')
+        camera_info = None
+        with open(pose_path, 'rb') as file:
+            camera_info = pickle.load(file)
+        w, h = camera_info['img_wh']
+        K = camera_info['K'] # (3, 3)
+        c2w = camera_info['c2w'] # (n, 3, 4), camera to world transform, 
+        # original camera model: x: right, y: down, z: forward
+        
+        output_dir = os.path.join(extracted_bag_dir, 'insertion_output')
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
+        
+        # This matrix defines the global pose where the obejct is placed in meters
+        f = K[0, 0]
+        rad = 2 * np.arctan(h/(2 * f))
+        deg = (rad / np.pi) * 180
+        proj = Matrix44.perspective_projection(deg, w/h, 0.001, 100)
+        
+        scale = 0.0005
+        shift = [-0.1, 0.08, -0.1]
+        model_mat= np.array([
+            [  scale,   0.0,   0.0,    shift[0]],
+            [  0.0,     scale, 0.0,    shift[1]],
+            [  0.0,     0.0,   scale,  shift[2]],
+            [  0.0,     0.0,   0.0,    1.0]
+        ]).T    
+
+        permute = np.array([
+            [0, 0, 1, 0],
+            [1, 0, 0, 0],
+            [0, -1, 0, 0],
+            [0, 0, 0, 1]
+        ])
+        model_mat = permute @ model_mat
+
+        frames = []
+        total_render_time = 0
+        n = len(img_paths)
+        for i in range(n):
+            start_time = time.time()
+
+            img = cv2.imread(img_paths[i])
+            cam2world_cv = c2w[i]
+            cam2world_cv[-1, -1] = 1
+            world2cam_cv = get_world2cam(cam2world_cv)
+
+            world2cam_gl = cv2gl(world2cam_cv).T
+            
+            res_img = self.render(img, proj, world2cam_gl, model_mat)
+            
+            total_render_time += time.time()-start_time
+            # print(f"iter {iter}: {time.time()-start_time} seconds")
+            cv2.imwrite(os.path.join(output_dir,'{:0>3d}.png'.format(i)), res_img)
+            frames.append(res_img)
+            # cv2.imshow('res', res_img)
+            # cv2.waitKey(5)
+
+        frames = np.array(frames)
+        imageio.mimsave(os.path.join(output_dir, 'video.mp4'),
+                        frames[:, :, :, [2,1,0]], fps=30, macro_block_size=1)
+        print(f"Average render time: {total_render_time/n}")
+
+def get_world2cam(cam2world):
+    R = cam2world[:3, :3]
+    t = cam2world[:3, -1] # camera position in world coord.
+    world2cam = np.zeros((4, 4))
+    world2cam[-1, -1] = 1
+    world2cam[:3, :3] = R.T 
+    world2cam[:3, -1] = R.T @ (-t)
+    return world2cam
+
+def cv2gl(trans):
+    '''
+    Convert transformation matrix from opencv to opengl
+    '''
+    convert = np.array([
+        [1,  0,  0,  0], 
+        [0, -1,  0,  0],
+        [0,  0, -1,  0],
+        [0,  0,  0,  1]
+    ])
+    trans_gl = convert @ trans
+    return trans_gl
+
 def main():
     import rospkg
     rospack = rospkg.RosPack()
     # extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor1')
     # model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
-    extracted_bag_dir = os.path.join('../../', 'data', 'extracted_bags', 'outdoor1')
+    extracted_bag_dir = os.path.join('../../', 'data', 'playground')
     model_path = os.path.join('../../', 'data', 'models')
 
     # extracted_bag_dir = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/extracted_bags/outdoor1"
@@ -203,7 +379,7 @@ def main():
     obj_path = os.path.join(model_path, 'dummy.obj')
     texture_path = os.path.join(model_path,'dummy.jpg')
 
-    iEngine = insertionEngine(
+    iEngine = insertionEngine2(
         obj_path,
         texture_path,
         is_online=False

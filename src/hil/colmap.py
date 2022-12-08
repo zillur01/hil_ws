@@ -42,18 +42,21 @@ def test_pose():
     dir_poses = 'data/extracted_bags/outdoor1/colmap/poses'
     pose_paths = [os.path.join(dir_poses, 'pose_{}.npy'.format(i)) for i, _ in enumerate(os.listdir(dir_poses))]
 
-    points = []
+    positions = []
+    look_at = []
     for path in pose_paths:
         pose = np.load(path)
         R = pose[:3,:3]
         t = pose[:3,-1]
-        point = R.T @ t
-        points.append(point)
-    
-    points = np.array(points)
-    print(np.mean(points, axis=0))
-    points = vedo.Points(points)
-    vedo.show(points, axes=1)
+        pos = -R.T @ t
+        positions.append(pos)
+        look_at.append(pos + R[2])
+
+    positions = np.array(positions)
+    positions = vedo.Points(positions, c='r')
+    look_at = np.array(look_at)
+    look_at = vedo.Points(look_at, c='b')
+    vedo.show([positions, look_at], axes=1)
 
 if __name__ == '__main__':
     # export_camera_poses()
