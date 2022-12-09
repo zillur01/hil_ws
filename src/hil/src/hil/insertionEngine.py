@@ -87,7 +87,9 @@ class insertionEngine:
 
         # Perspective Projection Matrix based on zed2 specs from: 
         # https://support.stereolabs.com/hc/en-us/articles/360007395634-What-is-the-camera-focal-length-and-field-of-view-
-        self.perspective = Matrix44.perspective_projection(72.0, 16.0/9.0, 0.28, 1000.0)
+        w, h = 1280, 720
+        fov = 72
+        self.perspective = Matrix44.perspective_projection(fov, w/h, 0.1, 100.0)
 
         # Context creation
         self.ctx = ModernGL.create_standalone_context()
@@ -111,8 +113,8 @@ class insertionEngine:
 
         # Framebuffers
         self.fbo = self.ctx.framebuffer(
-            self.ctx.renderbuffer((1280, 720)),
-            self.ctx.depth_renderbuffer((1280, 720)),
+            self.ctx.renderbuffer((w, h)),
+            self.ctx.depth_renderbuffer((w, h)),
         )
 
     def render(self, base_img: np.ndarray, 
@@ -160,8 +162,8 @@ class insertionEngine:
         img_paths = [os.path.join(img_dir, f'im_{i}.png') for i in range(n_frames)]
         poses = calculate_poses(gps_dir)
         # This matrix defines the global pose where the obejct is placed in meters
-        scale = 0.03
-        shift = [4.0, 6.0, 0.0]
+        scale = 0.02
+        shift = [0.4, 0.6, 1.8]
         model_mat= np.array([
             [  scale,   0.0,   0.0,    shift[0]],
             [  0.0,     scale, 0.0,    shift[1]],
@@ -241,7 +243,8 @@ def calculate_poses(gps_dir):
     r_gl = trans[None] @ rot
 
     # visualize_cameras(r_gl, pos, arrow_len=1)
-    
+    # quit()
+
     world2cam_gl = np.zeros((n_frames, 4, 4))
     world2cam_gl[:, -1, -1] = 1
     world2cam_gl[:, :3, :3] = r_gl
