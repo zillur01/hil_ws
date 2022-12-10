@@ -89,7 +89,7 @@ class insertionEngine:
         # https://support.stereolabs.com/hc/en-us/articles/360007395634-What-is-the-camera-focal-length-and-field-of-view-
         w, h = 1280, 720
         fov = 72
-        self.perspective = Matrix44.perspective_projection(fov, w/h, 0.1, 100.0)
+        self.perspective = Matrix44.perspective_projection(fov, w/h, 0.001, 100.0)
 
         # Context creation
         self.ctx = ModernGL.create_standalone_context()
