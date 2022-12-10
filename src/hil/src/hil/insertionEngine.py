@@ -163,7 +163,7 @@ class insertionEngine:
         poses = calculate_poses(gps_dir)
         # This matrix defines the global pose where the obejct is placed in meters
         scale = 0.02
-        shift = [0.4, 0.6, 1.8]
+        shift = [0.4, 0.6, -1.7]
         model_mat= np.array([
             [  scale,   0.0,   0.0,    shift[0]],
             [  0.0,     scale, 0.0,    shift[1]],
@@ -230,7 +230,7 @@ def calculate_poses(gps_dir):
     height -= height.mean()
     pos = np.stack([east, north, height]).T # position (n, 3)
 
-    euler = np.stack([pitch, roll, azimuth]).T 
+    euler = np.stack([-pitch, -roll, azimuth]).T 
     r = R.from_euler('xyz', euler, degrees=True)
     rot = r.as_matrix() # (n, 3, 3) 
     # row-based x: right, y: forward, z: up
