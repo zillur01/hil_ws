@@ -163,7 +163,7 @@ class insertionEngine:
         poses = calculate_poses(gps_dir)
         # This matrix defines the global pose where the obejct is placed in meters
         scale = 0.02
-        shift = [0.4, 0.6, -1.7]
+        shift = [2, 3, -1.7]
         model_mat= np.array([
             [  scale,   0.0,   0.0,    shift[0]],
             [  0.0,     scale, 0.0,    shift[1]],
