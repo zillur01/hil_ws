@@ -72,7 +72,7 @@ class insertionEngine:
     """
     def __init__(self, obj_path: str, texture_path: str, is_online: bool = True) -> None:
         """
-        Args: 
+        Args:
             obj_path:  Path to a 3D object file (.obj)
             texture_path: Path to a texture image for the input object
             is_online: True if using this class inside a ros node, False otherwise
@@ -83,9 +83,9 @@ class insertionEngine:
 
         self.obj = Obj.open(obj_path)
         self.vertex_data = self.obj.pack()
-        self.texture_image = Image.open(texture_path)    
+        self.texture_image = Image.open(texture_path)
 
-        # Perspective Projection Matrix based on zed2 specs from: 
+        # Perspective Projection Matrix based on zed2 specs from:
         # https://support.stereolabs.com/hc/en-us/articles/360007395634-What-is-the-camera-focal-length-and-field-of-view-
         w, h = 1280, 720
         fov = 72
@@ -117,7 +117,7 @@ class insertionEngine:
             self.ctx.depth_renderbuffer((w, h)),
         )
 
-    def render(self, base_img: np.ndarray, 
+    def render(self, base_img: np.ndarray,
                     projection: np.ndarray,
                     world2cam: np.ndarray,
                     model_mat: np.ndarray):
@@ -162,14 +162,16 @@ class insertionEngine:
         img_paths = [os.path.join(img_dir, f'im_{i}.png') for i in range(n_frames)]
         poses = calculate_poses(gps_dir)
         # This matrix defines the global pose where the obejct is placed in meters
-        scale = 0.02
-        shift = [2, 3, -1.7]
+        scale = 0.01
+        # shift = [2, 3, -1.7]
+        shift = [-25, -2, -1.7]
+        # shift = [15, -2, -1.7]
         model_mat= np.array([
             [  scale,   0.0,   0.0,    shift[0]],
             [  0.0,     scale, 0.0,    shift[1]],
             [  0.0,     0.0,   scale,  shift[2]],
             [  0.0,     0.0,   0.0,    1.0]
-        ]).T    
+        ]).T
 
         permute = np.array([
             [0, 1, 0, 0],
@@ -186,7 +188,7 @@ class insertionEngine:
             img = cv2.imread(img_paths[i])
             world2cam_gl = poses[i].T
             res_img = self.render(img, self.perspective, world2cam_gl, model_mat)
-            
+
             total_render_time += time.time()-start_time
             cv2.imwrite(os.path.join(output_dir,'{:0>3d}.png'.format(i)), res_img)
             frames.append(res_img)
@@ -200,7 +202,7 @@ def calculate_poses(gps_dir):
     '''
     Calculate world2cam matrix in OpenGL convention
     gps data format:
-        cur_gps.latitude, 
+        cur_gps.latitude,
         cur_gps.longitude,
         cur_gps.height,
         cur_gps.roll,
@@ -218,38 +220,77 @@ def calculate_poses(gps_dir):
     lon = gps_data[:, 1]
     height = gps_data[:, 2]
     roll = gps_data[:, 3] # y, right-handed
-    pitch = gps_data[:, 4] # x, right-handed 
+    pitch = gps_data[:, 4] # x, right-handed
     azimuth = gps_data[:, 5] # z, left-handed
 
     utm_data = utm.from_latlon(lat, lon)
     east, north = utm_data[0], utm_data[1]
-    
+
+    # -------------------------------------------------
     # normalize positions, center at (0, 0, 0)
     east -= east.mean()
     north -= north.mean()
     height -= height.mean()
     pos = np.stack([east, north, height]).T # position (n, 3)
 
-    euler = np.stack([-pitch, -roll, azimuth]).T 
+    euler = np.stack([pitch, roll, -azimuth]).T
     r = R.from_euler('xyz', euler, degrees=True)
-    rot = r.as_matrix() # (n, 3, 3) 
-    # row-based x: right, y: forward, z: up
-    # [OpenGL]  x: right, y: up,      z: backward
-    trans = np.array([
-        [1, 0, 0], 
-        [0, 0, 1], 
-        [0,-1, 0]
-    ])
-    r_gl = trans[None] @ rot
+    rot = r.as_matrix() # (n, 3, 3)
 
-    # visualize_cameras(r_gl, pos, arrow_len=1)
+    cam2world = np.zeros((n_frames, 4, 4))
+    cam2world[:, -1, -1] = 1
+    cam2world[:, :3, :3] = rot # rot.transpose((0, 2, 1))
+    cam2world[:, :3, 3] = pos
+
+    # t = 250
+    # k = 100
+    # vel = (pos[t:t+k] - pos[t-1:t+k-1])
+    # vel = vel / np.expand_dims(np.linalg.norm(vel, axis = 1)+1e-6, axis = 1)
+    # forward = rot[t-1:t+k-1][:, 1]
+
+    # visualize_cameras(rot.transpose((0, 2, 1)), pos, arrow_len=1)
     # quit()
 
-    world2cam_gl = np.zeros((n_frames, 4, 4))
-    world2cam_gl[:, -1, -1] = 1
-    world2cam_gl[:, :3, :3] = r_gl
-    t = r_gl @ -np.expand_dims(pos, -1)
-    world2cam_gl[:, :3, -1] = np.squeeze(t, -1)
+    cv2gl = np.array([
+        [1, 0, 0, 0],
+        [0, 0, 1, 0],
+        [0, -1, 0, 0],
+        [0, 0, 0, 1]
+    ])
+    world2cam_cv = np.zeros_like(cam2world)
+    world2cam_gl = np.zeros_like(cam2world)
+    for i in range(len(cam2world)):
+        world2cam_cv[i] = np.linalg.inv(cam2world[i])
+        world2cam_gl[i] = cv2gl @ world2cam_cv[i]
+
+    # # -------------------------------------------------
+    # # normalize positions, center at (0, 0, 0)
+    # east -= east.mean()
+    # north -= north.mean()
+    # height -= height.mean()
+    # pos = np.stack([east, north, height]).T # position (n, 3)
+
+    # euler = np.stack([-pitch, -roll, azimuth]).T
+    # r = R.from_euler('xyz', euler, degrees=True)
+    # rot = r.as_matrix() # (n, 3, 3)
+    # # row-based x: right, y: forward, z: up
+    # # [OpenGL]  x: right, y: up,      z: backward
+    # trans = np.array([
+    #     [1, 0, 0],
+    #     [0, 0, 1],
+    #     [0,-1, 0]
+    # ])
+    # r_gl = trans[None] @ rot
+
+    # # visualize_cameras(r_gl, pos, arrow_len=1)
+    # # quit()
+
+    # world2cam_gl = np.zeros((n_frames, 4, 4))
+    # world2cam_gl[:, -1, -1] = 1
+    # world2cam_gl[:, :3, :3] = r_gl
+    # t = r_gl @ -np.expand_dims(pos, -1)
+    # world2cam_gl[:, :3, -1] = np.squeeze(t, -1)
+    # # -------------------------------------------------
     return world2cam_gl
 
 def visualize_cameras(
@@ -257,9 +298,9 @@ def visualize_cameras(
     pos,
     arrow_len=1,
     s=1
-):  
+):
     '''
-    get vedo object representing cameras 
+    get vedo object representing cameras
     R, T: world2camera transform
     x: green, y: blue, z: red
     '''
@@ -281,7 +322,7 @@ class insertionEngine2:
     """
     def __init__(self, obj_path: str, texture_path: str, is_online: bool = True) -> None:
         """
-        Args: 
+        Args:
             obj_path:  Path to a 3D object file (.obj)
             texture_path: Path to a texture image for the input object
             is_online: True if using this class inside a ros node, False otherwise
@@ -292,7 +333,7 @@ class insertionEngine2:
 
         self.obj = Obj.open(obj_path)
         self.vertex_data = self.obj.pack()
-        self.texture_image = Image.open(texture_path)    
+        self.texture_image = Image.open(texture_path)
 
         # Context creation
         self.ctx = ModernGL.create_standalone_context()
@@ -320,7 +361,7 @@ class insertionEngine2:
             self.ctx.depth_renderbuffer((1008, 548)),
         )
 
-    def render(self, base_img: np.ndarray, 
+    def render(self, base_img: np.ndarray,
                     projection: np.ndarray,
                     world2cam: np.ndarray,
                     model_mat: np.ndarray):
@@ -365,19 +406,19 @@ class insertionEngine2:
             camera_info = pickle.load(file)
         w, h = camera_info['img_wh']
         K = camera_info['K'] # (3, 3)
-        c2w = camera_info['c2w'] # (n, 3, 4), camera to world transform, 
+        c2w = camera_info['c2w'] # (n, 3, 4), camera to world transform,
         # original camera model: x: right, y: down, z: forward
-        
+
         output_dir = os.path.join(extracted_bag_dir, 'insertion_output')
         if not os.path.exists(output_dir):
             os.mkdir(output_dir)
-        
+
         # This matrix defines the global pose where the obejct is placed in meters
         f = K[0, 0]
         rad = 2 * np.arctan(h/(2 * f))
         deg = (rad / np.pi) * 180
         proj = Matrix44.perspective_projection(deg, w/h, 0.001, 100)
-        
+
         scale = 0.0005
         shift = [-0.1, 0.08, -0.1]
         model_mat= np.array([
@@ -385,7 +426,7 @@ class insertionEngine2:
             [  0.0,     scale, 0.0,    shift[1]],
             [  0.0,     0.0,   scale,  shift[2]],
             [  0.0,     0.0,   0.0,    1.0]
-        ]).T    
+        ]).T
 
         permute = np.array([
             [0, 0, 1, 0],
@@ -407,9 +448,9 @@ class insertionEngine2:
             world2cam_cv = get_world2cam(cam2world_cv)
 
             world2cam_gl = cv2gl(world2cam_cv).T
-            
+
             res_img = self.render(img, proj, world2cam_gl, model_mat)
-            
+
             total_render_time += time.time()-start_time
             # print(f"iter {iter}: {time.time()-start_time} seconds")
             cv2.imwrite(os.path.join(output_dir,'{:0>3d}.png'.format(i)), res_img)
@@ -427,7 +468,7 @@ def get_world2cam(cam2world):
     t = cam2world[:3, -1] # camera position in world coord.
     world2cam = np.zeros((4, 4))
     world2cam[-1, -1] = 1
-    world2cam[:3, :3] = R.T 
+    world2cam[:3, :3] = R.T
     world2cam[:3, -1] = R.T @ (-t)
     return world2cam
 
@@ -438,7 +479,7 @@ def cv2gl(trans):
     [OpenGL] x: right, y: up,   z: backward
     '''
     convert = np.array([
-        [1,  0,  0,  0], 
+        [1,  0,  0,  0],
         [0, -1,  0,  0],
         [0,  0, -1,  0],
         [0,  0,  0,  1]
