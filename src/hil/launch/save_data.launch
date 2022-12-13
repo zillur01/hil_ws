@@ -1,5 +1,5 @@
 <launch>
-  <arg name="rosbag_filename" default="sensor.bag"/>
+  <arg name="rosbag_filename" default="outdoor1.bag"/>
   <param name="/use_sim_time" value="true"/>
   <node
     name="play" 

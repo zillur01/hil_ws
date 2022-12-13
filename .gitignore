@@ -12,6 +12,7 @@ data/
 *.npy
 *.npz
 *.obj
+*.mp4
 .vscode/
 # Byte-compiled / optimized / DLL files
 __pycache__/
