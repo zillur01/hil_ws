@@ -165,6 +165,7 @@ catkin_install_python(PROGRAMS
   mapping_node.py
   save_data_node.py
   gps_tf_pub_node.py
+  save_waypoint_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
