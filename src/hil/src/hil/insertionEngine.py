@@ -159,12 +159,13 @@ class insertionEngine:
         os.makedirs(output_dir, exist_ok=True)
 
         n_frames = len([i for i in os.listdir(img_dir)])
+        gps_paths = [os.path.join(gps_dir, 'raw_gps_{}.npy'.format(i)) for i in range(n_frames)]
         img_paths = [os.path.join(img_dir, f'im_{i}.png') for i in range(n_frames)]
         poses = calculate_poses(gps_dir)
         # This matrix defines the global pose where the obejct is placed in meters
         scale = 0.01
-        shift = [2, 3, -1.7]
-        # shift = [-25, -2, -1.7]
+        # shift = [2, 3, -1.7]
+        shift = [-25, -2, -1.7]
         # shift = [15, -2, -1.7]
         model_mat= np.array([
             [  scale,   0.0,   0.0,    shift[0]],
@@ -186,17 +187,56 @@ class insertionEngine:
         for i in tqdm(range(n_frames)):
             start_time = time.time()
             img = cv2.imread(img_paths[i])
-            world2cam_gl = poses[i].T
+            world2cam_gl = calculate_pose(gps_paths[i]).T
+            # world2cam_gl = poses[i].T
             res_img = self.render(img, self.perspective, world2cam_gl, model_mat)
 
             total_render_time += time.time()-start_time
             cv2.imwrite(os.path.join(output_dir,'{:0>3d}.png'.format(i)), res_img)
             frames.append(res_img)
+            print(f"time: {total_render_time/len(frames)}")
 
         frames = np.array(frames)
         imageio.mimsave(os.path.join(output_dir, 'video.mp4'),
                         frames[:, :, :, [2,1,0]], fps=30, macro_block_size=1)
         print(f"Average render time: {total_render_time/n_frames}")
+
+def calculate_pose(gps_path):
+    gps_data = np.load(gps_path)
+    latitude = gps_data[0]
+    longitude = gps_data[1]
+    height = gps_data[2]
+    roll = gps_data[3] # y, right-handed
+    pitch = gps_data[4] # x, right-handed
+    azimuth = gps_data[5] # z, left-handed
+    east_mean, north_mean, height_mean = 394654.1397068981, 4438790.165831781, 199.849746366553
+    utm_data = utm.from_latlon(latitude, longitude)
+    east, north = utm_data[0], utm_data[1]
+    # -------------------------------------------------
+    # normalize positions, center at (0, 0, 0)
+    east -= east_mean
+    north -= north_mean
+    height -= height_mean
+    print(east, north, height)
+    pos = np.array([east, north, height]).T # position (3)
+    pitch, roll, azimuth = pitch, roll, azimuth
+    euler = np.stack([pitch, roll, -azimuth]).T
+    r = R.from_euler('xyz', euler, degrees=True)
+    rot = r.as_matrix() # (3, 3)
+
+    cam2world = np.zeros((4, 4))
+    cam2world[-1, -1] = 1
+    cam2world[:3, :3] = rot 
+    cam2world[:3, 3] = pos
+    cv2gl = np.array([
+        [1, 0, 0, 0],
+        [0, 0, 1, 0],
+        [0, -1, 0, 0],
+        [0, 0, 0, 1]
+    ])
+    world2cam_cv = np.linalg.inv(cam2world)
+    world2cam_gl = cv2gl @ world2cam_cv
+    return world2cam_gl
 
 def calculate_poses(gps_dir):
     '''
@@ -492,7 +532,7 @@ def main():
     rospack = rospkg.RosPack()
     # extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor1')
     # model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
-    extracted_bag_dir = os.path.join('../../', 'data', 'extracted_bags/outdoor1_w_raw_gps_depth')
+    extracted_bag_dir = os.path.join('../../', 'data', 'extracted_bags/outdoor1_better_sync')
     model_path = os.path.join('../../', 'data', 'models')
 
     # extracted_bag_dir = "/home/bhargav/catkin_ws/src/HIL_Research/hil/data/extracted_bags/outdoor1"

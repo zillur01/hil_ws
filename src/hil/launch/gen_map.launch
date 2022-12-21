@@ -12,7 +12,7 @@
   <include file="$(find hil)/launch/base.launch" />
 
   <node name="map_generation" pkg="hil" 
-    type="mapping_node.py">
+    type="mapping_node.py" output = "screen">
     <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
     <remap from="/cloud" to="/lidar1/velodyne_points"/>
     <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
