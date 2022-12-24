@@ -8,7 +8,6 @@ import ros_numpy
 from cv_bridge import CvBridge
 import cv2
 from hil.utils import *
-from hil.tf_funcs import *
 from hil.globals import *
 import rospkg
 import os, sys, time

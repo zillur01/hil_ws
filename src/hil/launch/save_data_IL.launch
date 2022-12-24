@@ -6,15 +6,15 @@
     pkg="rosbag" 
     type="play" 
     args="$(arg input_bag_path)
-            --clock --rate=1
-            --delay=0.25"
+            --clock --rate=0.5
+            --delay=1"
   />
 
   <!-- <include file="$(find hil)/launch/base.launch"/> -->
 
   <node 
     name="save_data_node" pkg="hil" 
-    type="save_data_node_IL.py" output="screen">
+    type="save_data_node_IL.py" output="screen" required="true">
     <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
     <remap from="/cloud" to="/lidar1/velodyne_points"/>
     <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
