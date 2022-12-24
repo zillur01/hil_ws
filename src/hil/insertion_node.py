@@ -7,7 +7,7 @@ import hil.utils as ut
 from hil.tf_funcs import *
 from hil.globals import *
 import tf
-import os
+import os, time
 import rospkg
 from hil.insertionEngine import insertionEngine
 
@@ -27,7 +27,7 @@ class insertionNode:
 
         self.bridge = CvBridge()
         self.cur_image = None
-        
+        self.cur_image_timestamp = None
         self.projected_pub = rospy.Publisher(OUTPUT_MAP_TOPIC, PointCloud2)
         self.aug_im_publisher = rospy.Publisher('augmented_image', Image)
 
@@ -47,38 +47,58 @@ class insertionNode:
             is_online=False
         )
         # This matrix defines the global pose where the obejct is placed in meters
+        scale = 0.01
+        # shift = [2, 3, -1.7]
+        shift = [-25, -2, -1.7]
+        # shift = [15, -2, -1.7]
         self.model_mat= np.array([
-            [0,0.02,0,5.77],
-            [0.02,0,0,-21],
-            [0,0,0.02,-1.7],
-            [0,0,0,1]
-        ]).T    
+            [  scale,   0.0,   0.0,    shift[0]],
+            [  0.0,     scale, 0.0,    shift[1]],
+            [  0.0,     0.0,   scale,  shift[2]],
+            [  0.0,     0.0,   0.0,    1.0]
+        ]).T
+
+        permute = np.array([
+            [0, 1, 0, 0],
+            [1, 0, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+        self.model_mat = permute @ self.model_mat  
         # Subscribers
         self.image_sub = rospy.Subscriber(RGB_TOPIC, Image, callback=self.im_callback)
-
+        self.n = 0
+        self.total_time = 0
     def im_callback(self, img_msg: Image):
         self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-
+        self.cur_image_timestamp = img_msg.header.stamp
     def img_insertion(self):
-        # data_path = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor_bag', 'img')
-        # img = cv2.imread(os.path.join(data_path, 'im_100.jpg'))
-        # cv2.imshow('orig', img)
-        # res_img = self.iEngine.render(img, (-5,0,0), (0,0,0), self.model_mat)
-        # # rospy.sleep(5)
-        # cv2.imshow('res', res_img)
-        # cv2.waitKey(0)
-        T_gps = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, convertToTransform=True)
-        T_cam = T_gps
-        T_cam[2, 3] += 1.7  # Estimated z-val adjustment since camera is higher than gps unit 
-        cur_cam_world_pose = T_cam[:3,3]
-        in_front_of_cam = np.array([1,0,0,1])
-        look_at_world_pose = T_cam @ in_front_of_cam
+        cam2world = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, common_t = self.cur_image_timestamp, convertToTransform=True)
+        world2cam_cv = np.linalg.inv(cam2world)
 
-        res_img = self.iEngine.render(self.cur_image, cur_cam_world_pose, look_at_world_pose[:3], self.model_mat)
+        cv2gl = np.array([
+                [1, 0, 0, 0],
+                [0, 0, 1, 0],
+                [0, -1, 0, 0],
+                [0, 0, 0, 1]
+            ])
+        world2cam_gl = cv2gl @ world2cam_cv
+        world2cam_gl_left_hand = world2cam_gl.T
+        start_time = time.time()
+
+        res_img = self.iEngine.render(
+            self.cur_image, 
+            self.iEngine.perspective, 
+            world2cam_gl_left_hand, 
+            self.model_mat)
+        self.total_time += time.time()-start_time
 
         aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
+        aug_img_msg.header.stamp = rospy.Time.now()
+        aug_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
         self.aug_im_publisher.publish(aug_img_msg)
-
+        self.n += 1
+        rospy.loginfo(f"avg time at {self.n}: {self.total_time/self.n} seconds")
     # def pc_insertion(self):
     #     # Pointcloud Insertion
     #     self.model_path = os.path.join(rospack.get_path('hil'), 'data', 'models', "dummy.obj")

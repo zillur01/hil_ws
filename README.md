@@ -63,3 +63,19 @@
 5. `source devel/setup.bash` so ros know where to find your custom packages
 6. Download the desired data from box. See [Data Setup](https://github.com/bchandaka/HIL_Research/edit/main/README.md#data-setup)
 7. Try out some of `hil` package launch files!
+
+## Virtual object insertion 
+[Data arrangement]
+- Data are under `src/hil/data/`
+- Download data **extracted_bags** from [Box](https://uofi.app.box.com/folder/182731812480), and put under `src/hil/data/`
+
+[Run insertion]
+```bash
+git checkout bug_drifting
+cd src/hil/src/hil
+python insertion_colmap.py # insert with COLMAP poses
+python insertionEngine.py  # insert with GPS poses
+```
+and the output files are:
+- COLMAP: `src/hil/data/extracted_bags/outdoor1/insertion_output_colmap`
+- GPS: `src/hil/data/extracted_bags/outdoor1_w_raw_gps_depth/insertion_output`.

@@ -14,7 +14,7 @@ import rospkg
 rospack = rospkg.RosPack()
 
 k_time_sync_queue_size = 10
-k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
+k_time_sync_slop = 0.01 # allowed difference in seconds between messages to sync
 
 class mapNode:
     """ Aggregates a global 3D colored pointcloud map
@@ -48,11 +48,11 @@ class mapNode:
     def pc_im_callback(self, pc_msg: PointCloud2, img_msg: Image):
         # Grab car's relative transform from our World frame origin
         T_gps = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, convertToTransform=True)
-
         # Get current rgb pointcloud(in world coord) from image + lidar + transform inputs
         self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
         orig_pc = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
         pts_depth = ros_numpy.point_cloud2.get_xyz_points(orig_pc, remove_nans=True)
+
         imgfov_pts = ut.color_pointcloud(
                     pts_depth, self.cur_image, 
                     T_lidar_rgb, self.P,

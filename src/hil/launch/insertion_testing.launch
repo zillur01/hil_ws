@@ -12,7 +12,7 @@
   <include file="$(find hil)/launch/base.launch"/>
 
   <node name="insertion" pkg="hil" 
-    type="insertion_node.py">
+    type="insertion_node.py" output="screen">
     <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
     <remap from="/cloud" to="/lidar1/velodyne_points"/>
     <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
