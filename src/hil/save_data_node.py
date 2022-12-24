@@ -13,24 +13,26 @@ from hil.globals import *
 import rospkg
 import os
 import datetime 
+from PIL import Image as pil_img
 
 rospack = rospkg.RosPack()
 
-k_time_sync_queue_size = 1
+k_time_sync_queue_size = 10
 k_time_sync_slop = 0.01 # allowed difference in seconds between messages to sync
 
 class saveDataNode:
-    def __init__(self, extracted_bag_name):
+    def __init__(self, save_dir):
         rospy.init_node('saveData', anonymous=True)
-        self.fileDir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', extracted_bag_name+"3")
+        self.fileDir = save_dir
         self.img_path = os.path.join(self.fileDir, 'img')
         self.pc_path = os.path.join(self.fileDir, 'pc')
         self.pose_path = os.path.join(self.fileDir, 'pose')
         self.raw_gps_path = os.path.join(self.fileDir, 'raw_gps')
+        self.depth_path = os.path.join(self.fileDir, 'depth_img')
 
-        for _path in [self.fileDir, self.img_path, self.raw_gps_path]:
+        for _path in [self.fileDir, self.img_path, self.depth_path, self.raw_gps_path]:
             if not os.path.exists(_path):
-                os.mkdir(_path)
+                os.makedirs(_path)
        
         self.camera_info = get_camera_info(CAMERA_INFO_TOPIC)
         self.P = get_projection_matrix(self.camera_info)
@@ -43,9 +45,10 @@ class saveDataNode:
         self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
         self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
         self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
+        self.depth_sub = message_filters.Subscriber(DEPTH_IM_TOPIC, Image)
 
         self.pc_im_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.image_sub, self.inspva_sub], 
+            [self.image_sub, self.depth_sub, self.inspva_sub], 
             k_time_sync_queue_size, 
             k_time_sync_slop
             )
@@ -55,7 +58,7 @@ class saveDataNode:
         self.tf_listener = tf.TransformListener()
         self.gps_last = np.zeros(7)
 
-    def pc_im_callback(self, img_msg: Image, cur_gps: Inspva):
+    def pc_im_callback(self, img_msg: Image, depth_msg: Image, cur_gps: Inspva):
         # T_gps = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, convertToTransform=True)
         self.diff += abs(cur_gps.header.stamp.to_sec()-img_msg.header.stamp.to_sec())
         print(cur_gps.header.stamp.to_sec()-img_msg.header.stamp.to_sec())
@@ -74,11 +77,15 @@ class saveDataNode:
         if self.gps_last[0] - gps_out[0] == 0 and self.gps_last[1]-gps_out[1] == 0:
             print(f"Same coord at {iter}")
         curImage = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-        # pts_depth = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
+        mode_depth='F'
+        depth_map = np.asarray(pil_img.frombytes(mode_depth, (depth_msg.width, depth_msg.height), depth_msg.data))
 
-        # cv2.imwrite(os.path.join(self.img_path, f'im_{self.iter}.png'), curImage)
+        np.save(os.path.join(self.depth_path, f'depth_im{self.iter}.npy'), depth_map)
+        cv2.imwrite(os.path.join(self.img_path, f'im_{self.iter}.png'), curImage)
+        np.save(os.path.join(self.raw_gps_path, f'raw_gps_{self.iter}.npy'), gps_out)
+
+        # pts_depth = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
         # # np.save(os.path.join(self.pc_path, f'pc_{self.iter}.npy'), pts_depth)
-        # np.save(os.path.join(self.raw_gps_path, f'raw_gps_{self.iter}.npy'), gps_out)
 
         # np.save(os.path.join(self.pose_path, f'gps_{self.iter}.npy'), T_gps)
         self.iter += 1
@@ -87,10 +94,13 @@ class saveDataNode:
 
 def main():
     node_name = "save_data_node"
-    param_name = "rosbag_filename"
-    bag_filename = rospy.get_param(f'{node_name}/{param_name}')
-    bag_filename = bag_filename.split('.')[0]
-    node = saveDataNode(bag_filename)
+    param_name = "input_bag_path"
+    bag_path = rospy.get_param(f'{node_name}/{param_name}')
+    bag_filename = os.path.splitext(os.path.basename(bag_path))[0]
+    extracted_dir = os.path.dirname(bag_path) + "_extracted"
+    save_dir = os.path.join(extracted_dir, bag_filename)
+    print(save_dir)
+    node = saveDataNode(save_dir)
     node.run()
     print(f"Done, iters:{node.iter}, {node.diff/node.iter}")
 

@@ -1,6 +1,7 @@
 import numpy as np
 # Topic Names
 RGB_TOPIC = "/rgb"
+DEPTH_IM_TOPIC = "/zed2/zed_node/depth/depth_registered"
 LIDAR_PC_TOPIC = "/cloud"
 CAMERA_INFO_TOPIC = "/camera_info"
 GPS_TOPIC = "/gps"
