@@ -1,0 +1,3 @@
+[submodule "src/hil/src/HIL_realtime_rendering"]
+	path = src/hil/src/HIL_realtime_rendering
+	url = https://github.com/yshen47/HIL_realtime_rendering
