@@ -1,10 +1,16 @@
 numpy
-# Insertion Requirements
-objloader
-moderngl
-pillow
-pyrr
 opencv-python
 matplotlib
+pillow
+# Insertion Requirements
+objloader
+pyrr
+moderngl
+moderngl==5.7.2
+moderngl-window==2.4.2
+pygame==2.1.2
+omegaconf==2.0.0
+pyglm
+torch
 # GPS code Requirements
 utm

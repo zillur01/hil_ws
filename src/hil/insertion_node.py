@@ -7,11 +7,17 @@ import hil.utils as ut
 from hil.tf_funcs import *
 from hil.globals import *
 import tf
-import os, time
+import os, time, sys
 import rospkg
-from hil.insertionEngine import insertionEngine
-
 rospack = rospkg.RosPack()
+rendering_lib_path = os.path.join(rospack.get_path('hil'), 'src', 'HIL_realtime_rendering')
+sys.path.append(rendering_lib_path)
+
+from hil.insertionEngine import insertionEngine
+from HIL_realtime_rendering.main import HIL_rendering
+import moderngl_window as mglw
+from moderngl_window.conf import settings
+
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
@@ -129,11 +135,14 @@ class insertionNode:
     #     self.rgb_pointcloud = np.hstack((self.rgb_pointcloud, model_pts))
 
     def run(self):
-        r = rospy.Rate(10) # 10hz 
-        while not rospy.is_shutdown():
-            if self.cur_image is not None:
-                self.img_insertion()
-            r.sleep()
+        settings.WINDOW['class'] = 'moderngl_window.context.pygame.Window'
+        mglw.run_window_config(HIL_rendering)
+
+        # r = rospy.Rate(10) # 10hz 
+        # while not rospy.is_shutdown():
+        #     if self.cur_image is not None:
+        #         self.img_insertion()
+        #     r.sleep()
 
 def main():
     node = insertionNode()
