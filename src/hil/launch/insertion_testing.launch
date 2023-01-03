@@ -5,8 +5,8 @@
     pkg="rosbag" 
     type="play" 
     args="$(find hil)/data/GEM_rosbags/outdoor1.bag
-            --clock
-            --delay=1"
+            --clock 
+            --delay=0"
   />
 
   <include file="$(find hil)/launch/base.launch"/>

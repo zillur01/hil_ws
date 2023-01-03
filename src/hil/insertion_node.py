@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
+import HIL_realtime_rendering
 import rospy
 from sensor_msgs.msg import PointCloud2, Image
 from cv_bridge import CvBridge
 import cv2
+from PIL import Image as pil_img
 import hil.utils as ut
 from hil.tf_funcs import *
 from hil.globals import *
-import tf
+import tf, message_filters
 import os, time, sys
 import rospkg
 rospack = rospkg.RosPack()
 rendering_lib_path = os.path.join(rospack.get_path('hil'), 'src', 'HIL_realtime_rendering')
 sys.path.append(rendering_lib_path)
-
+os.chdir(rendering_lib_path)
 from hil.insertionEngine import insertionEngine
-from HIL_realtime_rendering.main import HIL_rendering
+from hil.tf_funcs import get_gps_tf
+from hil.utils import tf_to_transform
+from HIL_realtime_rendering.main import HIL_rendering, setup_window_config, cleanup_window_config, DEFAULT_ARGS
+from HIL_realtime_rendering.constants import T_blender2opengl
 import moderngl_window as mglw
-from moderngl_window.conf import settings
 
 
 k_time_sync_queue_size = 10
@@ -34,8 +38,9 @@ class insertionNode:
         self.bridge = CvBridge()
         self.cur_image = None
         self.cur_image_timestamp = None
+        self.T_gps = np.eye(4)
         self.projected_pub = rospy.Publisher(OUTPUT_MAP_TOPIC, PointCloud2)
-        self.aug_im_publisher = rospy.Publisher('augmented_image', Image)
+        self.aug_im_publisher = rospy.Publisher('augmented_image', Image, queue_size=10)
 
         self.rgb_pointcloud = np.zeros(0, dtype=[('x', float), ('y', float), ('z', float),
                                     ('rgb', np.float32)])
@@ -43,43 +48,38 @@ class insertionNode:
 
         self.tf_listener = tf.TransformListener()
 
-        model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
-        obj_path = os.path.join(model_path, 'dummy.obj')
-        texture_path = os.path.join(model_path,'dummy.jpg')
-
-        self.iEngine = insertionEngine(
-            obj_path,
-            texture_path,
-            is_online=False
-        )
-        # This matrix defines the global pose where the obejct is placed in meters
-        scale = 0.01
-        # shift = [2, 3, -1.7]
-        shift = [-25, -2, -1.7]
-        # shift = [15, -2, -1.7]
-        self.model_mat= np.array([
-            [  scale,   0.0,   0.0,    shift[0]],
-            [  0.0,     scale, 0.0,    shift[1]],
-            [  0.0,     0.0,   scale,  shift[2]],
-            [  0.0,     0.0,   0.0,    1.0]
-        ]).T
-
-        permute = np.array([
-            [0, 1, 0, 0],
-            [1, 0, 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1]
-        ])
-        self.model_mat = permute @ self.model_mat  
+        
         # Subscribers
-        self.image_sub = rospy.Subscriber(RGB_TOPIC, Image, callback=self.im_callback)
+        # self.image_sub = rospy.Subscriber(RGB_TOPIC, Image, callback=self.im_callback)
+        self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
+        self.depth_sub = message_filters.Subscriber(DEPTH_IM_TOPIC, Image)
+        self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
+
+        self.im_depth_sub = message_filters.ApproximateTimeSynchronizer(
+            [self.image_sub, self.depth_sub, self.inspva_sub], 
+            k_time_sync_queue_size, 
+            k_time_sync_slop
+            )
+        self.im_depth_sub.registerCallback(self.im_depth_callback)
         self.n = 0
         self.total_time = 0
-    def im_callback(self, img_msg: Image):
-        self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
+
+        # Rendering setup
+
+        self.window, self.config, self.timer = setup_window_config(HIL_rendering, DEFAULT_ARGS, True)
+
+
+    def im_depth_callback(self, img_msg: Image, depth_msg: Image, gps_msg: Inspva):
+        self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
         self.cur_image_timestamp = img_msg.header.stamp
-    def img_insertion(self):
-        cam2world = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, common_t = self.cur_image_timestamp, convertToTransform=True)
+        mode_depth='F'
+        self.depth_map = np.asarray(pil_img.frombytes(mode_depth, (depth_msg.width, depth_msg.height), depth_msg.data))
+        (t,Q) = get_gps_tf(gps_msg, gps_msg)
+        self.T_gps = tf_to_transform(t, Q)
+
+    def img_insertion2(self):
+        # cam2world = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, common_t = self.cur_image_timestamp, convertToTransform=True)
+        cam2world = self.T_gps
         world2cam_cv = np.linalg.inv(cam2world)
 
         cv2gl = np.array([
@@ -89,22 +89,68 @@ class insertionNode:
                 [0, 0, 0, 1]
             ])
         world2cam_gl = cv2gl @ world2cam_cv
-        world2cam_gl_left_hand = world2cam_gl.T
+        sensor_data = {
+            "rgb": self.cur_image[..., :3].astype(np.float32) / 255,
+            "pose": world2cam_gl @ T_blender2opengl,
+            "depth": self.depth_map
+        }
+
         start_time = time.time()
 
-        res_img = self.iEngine.render(
-            self.cur_image, 
-            self.iEngine.perspective, 
-            world2cam_gl_left_hand, 
-            self.model_mat)
+        # Rendering iteration
+        if self.config.clear_color is not None:
+            self.window.clear(*self.config.clear_color)
+
+        # Always bind the window framebuffer before calling render
+        self.window.use()
+        res_img = self.window.config.render_single_frame(
+            sensor_data
+        )
+        
+        res_img = cv2.cvtColor((res_img[..., :3] * 255.).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        # End render iter
+
         self.total_time += time.time()-start_time
 
+        # publish message
         aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
         aug_img_msg.header.stamp = rospy.Time.now()
         aug_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
         self.aug_im_publisher.publish(aug_img_msg)
+
         self.n += 1
-        rospy.loginfo(f"avg time at {self.n}: {self.total_time/self.n} seconds")
+        rospy.loginfo(f"avg time at {self.n}: {self.n/self.total_time} fps")
+
+        if not self.window.is_closing:
+            self.window.swap_buffers()
+
+    # def img_insertion(self):
+    #     cam2world = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, common_t = self.cur_image_timestamp, convertToTransform=True)
+    #     world2cam_cv = np.linalg.inv(cam2world)
+
+    #     cv2gl = np.array([
+    #             [1, 0, 0, 0],
+    #             [0, 0, 1, 0],
+    #             [0, -1, 0, 0],
+    #             [0, 0, 0, 1]
+    #         ])
+    #     world2cam_gl = cv2gl @ world2cam_cv
+    #     world2cam_gl_left_hand = world2cam_gl.T
+    #     start_time = time.time()
+
+    #     res_img = self.iEngine.render(
+    #         self.cur_image, 
+    #         self.iEngine.perspective, 
+    #         world2cam_gl_left_hand, 
+    #         self.model_mat)
+    #     self.total_time += time.time()-start_time
+
+    #     aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
+    #     aug_img_msg.header.stamp = self.cur_image_timestamp #rospy.Time.now()
+    #     aug_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
+    #     self.aug_im_publisher.publish(aug_img_msg)
+    #     self.n += 1
+    #     rospy.loginfo(f"avg time at {self.n}: {self.total_time/self.n} seconds")
     # def pc_insertion(self):
     #     # Pointcloud Insertion
     #     self.model_path = os.path.join(rospack.get_path('hil'), 'data', 'models', "dummy.obj")
@@ -135,14 +181,12 @@ class insertionNode:
     #     self.rgb_pointcloud = np.hstack((self.rgb_pointcloud, model_pts))
 
     def run(self):
-        settings.WINDOW['class'] = 'moderngl_window.context.pygame.Window'
-        mglw.run_window_config(HIL_rendering)
-
-        # r = rospy.Rate(10) # 10hz 
-        # while not rospy.is_shutdown():
-        #     if self.cur_image is not None:
-        #         self.img_insertion()
-        #     r.sleep()
+        r = rospy.Rate(10) # 10hz 
+        while not rospy.is_shutdown():
+            if self.cur_image is not None:
+                print("Calling")
+                self.img_insertion2()
+            r.sleep()
 
 def main():
     node = insertionNode()

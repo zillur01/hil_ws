@@ -5,7 +5,6 @@ pillow
 # Insertion Requirements
 objloader
 pyrr
-moderngl
 moderngl==5.7.2
 moderngl-window==2.4.2
 pygame==2.1.2
