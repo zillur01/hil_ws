@@ -21,7 +21,6 @@ from HIL_realtime_rendering.main import HIL_rendering, setup_window_config, clea
 from HIL_realtime_rendering.constants import T_blender2opengl
 import moderngl_window as mglw
 
-
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 
@@ -88,8 +87,9 @@ class insertionNode:
                 [0, 0, 0, 1]
             ])
         world2cam_gl = cv2gl @ world2cam_cv
+        input_img = self.cur_image
         sensor_data = {
-            "rgb": self.cur_image[..., :3].astype(np.float32) / 255,
+            "rgb": input_img[..., :3].astype(np.float32) / 255,
             "pose": world2cam_gl @ T_blender2opengl,
             "depth": self.depth_map
         }
@@ -110,8 +110,9 @@ class insertionNode:
         # End render iter
 
         self.total_time += time.time()-start_time
-        # cv2.imshow("res", res_img)
-        # cv2.waitKey(1)
+        cv2.imshow("original", cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
+        cv2.imshow("res", res_img)
+        cv2.waitKey(1)
         # publish message
         aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
         aug_img_msg.header.stamp = rospy.Time.now()
