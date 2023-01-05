@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import HIL_realtime_rendering
 import rospy
 from sensor_msgs.msg import PointCloud2, Image
 from cv_bridge import CvBridge
@@ -77,7 +76,7 @@ class insertionNode:
         (t,Q) = get_gps_tf(gps_msg, gps_msg)
         self.T_gps = tf_to_transform(t, Q)
 
-    def img_insertion2(self):
+    def img_insertion(self):
         # cam2world = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, common_t = self.cur_image_timestamp, convertToTransform=True)
         cam2world = self.T_gps
         world2cam_cv = np.linalg.inv(cam2world)
@@ -111,7 +110,8 @@ class insertionNode:
         # End render iter
 
         self.total_time += time.time()-start_time
-
+        # cv2.imshow("res", res_img)
+        # cv2.waitKey(1)
         # publish message
         aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
         aug_img_msg.header.stamp = rospy.Time.now()
@@ -124,33 +124,6 @@ class insertionNode:
         if not self.window.is_closing:
             self.window.swap_buffers()
 
-    # def img_insertion(self):
-    #     cam2world = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, common_t = self.cur_image_timestamp, convertToTransform=True)
-    #     world2cam_cv = np.linalg.inv(cam2world)
-
-    #     cv2gl = np.array([
-    #             [1, 0, 0, 0],
-    #             [0, 0, 1, 0],
-    #             [0, -1, 0, 0],
-    #             [0, 0, 0, 1]
-    #         ])
-    #     world2cam_gl = cv2gl @ world2cam_cv
-    #     world2cam_gl_left_hand = world2cam_gl.T
-    #     start_time = time.time()
-
-    #     res_img = self.iEngine.render(
-    #         self.cur_image, 
-    #         self.iEngine.perspective, 
-    #         world2cam_gl_left_hand, 
-    #         self.model_mat)
-    #     self.total_time += time.time()-start_time
-
-    #     aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
-    #     aug_img_msg.header.stamp = self.cur_image_timestamp #rospy.Time.now()
-    #     aug_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
-    #     self.aug_im_publisher.publish(aug_img_msg)
-    #     self.n += 1
-    #     rospy.loginfo(f"avg time at {self.n}: {self.total_time/self.n} seconds")
     # def pc_insertion(self):
     #     # Pointcloud Insertion
     #     self.model_path = os.path.join(rospack.get_path('hil'), 'data', 'models', "dummy.obj")
@@ -181,11 +154,11 @@ class insertionNode:
     #     self.rgb_pointcloud = np.hstack((self.rgb_pointcloud, model_pts))
 
     def run(self):
-        r = rospy.Rate(10) # 10hz 
+        r = rospy.Rate(5) # 10hz 
         while not rospy.is_shutdown():
             if self.cur_image is not None:
                 print("Calling")
-                self.img_insertion2()
+                self.img_insertion()
             r.sleep()
 
 def main():

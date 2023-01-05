@@ -17,7 +17,8 @@ def get_gps_tf(start_gps:Inspva, cur_gps: Inspva) -> 'tuple[np.ndarray, np.ndarr
         start_gps: starting gps message of the car(treated as origin of our world coordinate space)
         cur_gps: current gps message position
     """
-    east_origin, north_origin, height_origin = 394702.00, 4438802.00, 200
+    # east_origin, north_origin, height_origin = 394702.00, 4438802.00, 200
+    east_origin, north_origin, height_origin = 394654.1397068981, 4438790.165831781, 199.849746366553
     # origin_utm = utm.from_latlon(40.092887,-88.235184)
     # east_origin, north_origin, height_origin = origin_utm[0], origin_utm[1], 200
     utm_data = utm.from_latlon(cur_gps.latitude, cur_gps.longitude)
