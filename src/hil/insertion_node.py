@@ -18,8 +18,11 @@ from hil.insertionEngine import insertionEngine
 from hil.tf_funcs import get_gps_tf
 from hil.utils import tf_to_transform
 from HIL_realtime_rendering.main import HIL_rendering, setup_window_config, cleanup_window_config, DEFAULT_ARGS
+from HIL_realtime_rendering.main import config as rendering_config
 from HIL_realtime_rendering.constants import T_blender2opengl
 import moderngl_window as mglw
+import torch.nn.functional as F
+import torch
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
@@ -29,14 +32,14 @@ class insertionNode:
         as the car moves around the environment"""
     def __init__(self):
         rospy.init_node('insertion', anonymous=True)
-        self.camera_info = ut.get_camera_info(CAMERA_INFO_TOPIC)
-        self.P = ut.get_projection_matrix(self.camera_info)
-        self.height, self.width = ut.get_img_size(self.camera_info)
+        self.config = rendering_config
+        self.window_size = rendering_config.window_size
 
         self.bridge = CvBridge()
         self.cur_image = None
+        self.depth_map = None
         self.cur_image_timestamp = None
-        self.T_gps = np.eye(4)
+        self.T_gps = None
         self.projected_pub = rospy.Publisher(OUTPUT_MAP_TOPIC, PointCloud2)
         self.aug_im_publisher = rospy.Publisher('augmented_image', Image, queue_size=10)
 
@@ -59,19 +62,20 @@ class insertionNode:
             k_time_sync_slop
             )
         self.im_depth_sub.registerCallback(self.im_depth_callback)
-        self.n = 0
-        self.total_time = 0
-
+        self.n_insertion = 0 # number of times img_insertion is called
+        self.n_callback = 0 # numer of times im_depth_callback is called
         # Rendering setup
 
-        self.window, self.config, self.timer = setup_window_config(HIL_rendering, DEFAULT_ARGS, True)
-
+        self.window, self.config_obj, self.timer = setup_window_config(HIL_rendering, DEFAULT_ARGS, True)
+        self.timer.start()
 
     def im_depth_callback(self, img_msg: Image, depth_msg: Image, gps_msg: Inspva):
-        self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
+        cv2_rgb_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
+        self.cur_image = np.array(pil_img.fromarray(cv2_rgb_image).resize(size=self.window_size, resample=pil_img.Resampling.BILINEAR))
         self.cur_image_timestamp = img_msg.header.stamp
         mode_depth='F'
-        self.depth_map = np.asarray(pil_img.frombytes(mode_depth, (depth_msg.width, depth_msg.height), depth_msg.data))
+        orig_depth_map = np.asarray(pil_img.frombytes(mode_depth, (depth_msg.width, depth_msg.height), depth_msg.data))
+        self.depth_map = F.interpolate(torch.from_numpy(np.nan_to_num(orig_depth_map, nan=np.inf, posinf=np.inf, neginf=np.inf)[None, None]), scale_factor=0.5).numpy()[0][0]
         (t,Q) = get_gps_tf(gps_msg, gps_msg)
         self.T_gps = tf_to_transform(t, Q)
 
@@ -94,8 +98,6 @@ class insertionNode:
             "depth": self.depth_map
         }
 
-        start_time = time.time()
-
         # Rendering iteration
         if self.config.clear_color is not None:
             self.window.clear(*self.config.clear_color)
@@ -105,22 +107,21 @@ class insertionNode:
         res_img = self.window.config.render_single_frame(
             sensor_data
         )
-        
+
         res_img = cv2.cvtColor((res_img[..., :3] * 255.).astype(np.uint8), cv2.COLOR_RGB2BGR)
         # End render iter
 
-        self.total_time += time.time()-start_time
-        cv2.imshow("original", cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
-        cv2.imshow("res", res_img)
-        cv2.waitKey(1)
         # publish message
         aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
         aug_img_msg.header.stamp = rospy.Time.now()
         aug_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
         self.aug_im_publisher.publish(aug_img_msg)
 
-        self.n += 1
-        rospy.loginfo(f"avg time at {self.n}: {self.n/self.total_time} fps")
+        self.n_insertion += 1
+        current_time, delta = self.timer.next_frame()
+        print('frame {}, FPS = {}'.format(self.n_insertion, self.n_insertion / current_time))
+
+        # rospy.loginfo(f"avg time at {self.n}: {self.n/self.total_time} fps")
 
         if not self.window.is_closing:
             self.window.swap_buffers()
@@ -153,14 +154,19 @@ class insertionNode:
     #     model_pts = ros_numpy.point_cloud2.merge_rgb_fields(model_pts)
 
     #     self.rgb_pointcloud = np.hstack((self.rgb_pointcloud, model_pts))
+    def on_shutdown(self):
+        cleanup_window_config(self.window, self.timer)
 
     def run(self):
-        r = rospy.Rate(5) # 10hz 
+        rospy.on_shutdown(self.on_shutdown)
+        print("Starting main insertion loop")
+        # r = rospy.Rate(1) # 10hz 
         while not rospy.is_shutdown():
-            if self.cur_image is not None:
-                print("Calling")
+            if  self.cur_image is not None and \
+                self.depth_map is not None and \
+                self.T_gps is not None:
                 self.img_insertion()
-            r.sleep()
+            # r.sleep()
 
 def main():
     node = insertionNode()
