@@ -18,7 +18,7 @@ from PIL import Image as pil_img
 rospack = rospkg.RosPack()
 
 k_time_sync_queue_size = 10
-k_time_sync_slop = 0.01 # allowed difference in seconds between messages to sync
+k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 
 class saveDataNode:
     def __init__(self, save_dir):

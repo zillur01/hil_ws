@@ -10,6 +10,7 @@ moderngl-window==2.4.2
 pygame==2.1.2
 omegaconf==2.0.0
 pyglm
-torch
+trimesh
+# install torch and torchvision separaetely
 # GPS code Requirements
 utm

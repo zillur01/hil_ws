@@ -24,6 +24,9 @@ import moderngl_window as mglw
 import torch.nn.functional as F
 import torch
 
+DEBUG = True
+FRAME_RATE = 2
+
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 
@@ -70,13 +73,16 @@ class insertionNode:
         self.timer.start()
 
     def im_depth_callback(self, img_msg: Image, depth_msg: Image, gps_msg: Inspva):
+        print("received data")
         cv2_rgb_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
+        # cv2.imshow("res2", cv2_rgb_image)
+        # cv2.waitKey(1)
         self.cur_image = np.array(pil_img.fromarray(cv2_rgb_image).resize(size=self.window_size, resample=pil_img.Resampling.BILINEAR))
         self.cur_image_timestamp = img_msg.header.stamp
         mode_depth='F'
         orig_depth_map = np.asarray(pil_img.frombytes(mode_depth, (depth_msg.width, depth_msg.height), depth_msg.data))
         self.depth_map = F.interpolate(torch.from_numpy(np.nan_to_num(orig_depth_map, nan=np.inf, posinf=np.inf, neginf=np.inf)[None, None]), scale_factor=0.5).numpy()[0][0]
-        (t,Q) = get_gps_tf(gps_msg, gps_msg)
+        (t,Q) = get_gps_tf(gps_msg)
         self.T_gps = tf_to_transform(t, Q)
 
     def img_insertion(self):
@@ -109,10 +115,15 @@ class insertionNode:
         )
 
         res_img = cv2.cvtColor((res_img[..., :3] * 255.).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        if DEBUG:
+            cv2.imshow("Original", cv2.cvtColor(self.cur_image, cv2.COLOR_RGB2BGR))
+            cv2.waitKey(1)
+            cv2.imshow("Inserted", res_img)
+            cv2.waitKey(1)
         # End render iter
 
         # publish message
-        aug_img_msg = self.bridge.cv2_to_imgmsg(res_img)
+        aug_img_msg = self.bridge.cv2_to_imgmsg(res_img, encoding="bgr8")
         aug_img_msg.header.stamp = rospy.Time.now()
         aug_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
         self.aug_im_publisher.publish(aug_img_msg)
@@ -160,13 +171,14 @@ class insertionNode:
     def run(self):
         rospy.on_shutdown(self.on_shutdown)
         print("Starting main insertion loop")
-        # r = rospy.Rate(1) # 10hz 
+        r = rospy.Rate(FRAME_RATE) # 10hz 
         while not rospy.is_shutdown():
             if  self.cur_image is not None and \
                 self.depth_map is not None and \
                 self.T_gps is not None:
+                print("inserting")
                 self.img_insertion()
-            # r.sleep()
+            r.sleep()
 
 def main():
     node = insertionNode()

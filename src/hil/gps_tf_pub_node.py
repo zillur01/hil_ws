@@ -29,7 +29,7 @@ class gps_to_tf_node:
             self.start_gps = cur_gps
             self.first_msg = True
         if self.last_pub_time < rospy.Time.now():
-            (t,Q) = tf_funcs.get_gps_tf(self.start_gps, cur_gps)
+            (t,Q) = tf_funcs.get_gps_tf(cur_gps)
             self.br.sendTransform(
                 t, Q, rospy.Time.now(), GPS_FRAME, WORLD_FRAME
             )

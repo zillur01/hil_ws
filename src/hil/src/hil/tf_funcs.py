@@ -10,11 +10,10 @@ from scipy.spatial.transform import Rotation as R
 from hil.utils import *
 k_tf_timeout = rospy.Duration(1) # timeout for waiting for a tf msg
 
-def get_gps_tf(start_gps:Inspva, cur_gps: Inspva) -> 'tuple[np.ndarray, np.ndarray]':
-    """ Returns the (t,Q)=(translation, Quaternion) between start_gps and cur_gps
+def get_gps_tf(cur_gps: Inspva) -> 'tuple[np.ndarray, np.ndarray]':
+    """ Returns the (t,Q)=(translation, Quaternion) between the origin and cur_gps
         This transform describes the car's pose in our world coordinates
     Args: 
-        start_gps: starting gps message of the car(treated as origin of our world coordinate space)
         cur_gps: current gps message position
     """
     east_origin, north_origin, height_origin = 394702.00, 4438802.00, 200
