@@ -73,7 +73,8 @@ class insertionNode:
         self.timer.start()
 
     def im_depth_callback(self, img_msg: Image, depth_msg: Image, gps_msg: Inspva):
-        print("received data")
+        """Sensor data(rgb, depth, pose) updated as synced messages are received"""
+        # print("received data")
         cv2_rgb_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
         # cv2.imshow("res2", cv2_rgb_image)
         # cv2.waitKey(1)
@@ -105,8 +106,8 @@ class insertionNode:
         }
 
         # Rendering iteration
-        if self.config.clear_color is not None:
-            self.window.clear(*self.config.clear_color)
+        if self.config_obj.clear_color is not None:
+            self.window.clear(*self.config_obj.clear_color)
 
         # Always bind the window framebuffer before calling render
         self.window.use()

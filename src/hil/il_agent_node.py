@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-from lib2to3.refactor import get_fixers_from_package
 import numpy as np
 import rospy
 import message_filters
-from std_msgs.msg import Float64
 from sensor_msgs.msg import PointCloud2, Image
 from novatel_gps_msgs.msg import Inspva
 from pacmod_msgs.msg import PacmodCmd, SystemRptFloat, VehicleSpeedRpt
@@ -19,7 +17,7 @@ il_lib_path = os.path.join(rospack.get_path('hil'), 'src', 'HIL_imitation_learni
 sys.path.append(il_lib_path)
 os.chdir(il_lib_path)
 
-from HIL_imitation_learning.main import IL_Agent, save_frames_as_gif, visualize_data, RosStreamSimulator
+from HIL_imitation_learning.main import IL_Agent, save_frames_as_gif, visualize_data
 from HIL_imitation_learning.main import config as il_config
 
 
@@ -56,7 +54,7 @@ class ilAgentNode:
         # self.pacmod_speed_sub = rospy.Subscriber("/pacmod/parsed_tx/vehicle_speed_rpt", VehicleSpeedRpt, callback=self.speed_cb)
         
         # Predicted Speed Publisher
-        self.pred_speed_pb = rospy.Publisher("il_pred_speed_pub", VehicleSpeedRpt, queue_size=10)
+        self.pred_speed_pb = rospy.Publisher("/il/pred_speed", VehicleSpeedRpt, queue_size=10)
         self.count = 0
         self.start_time = time.time()
         self.last_time = time.time()
