@@ -96,13 +96,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
     for filename in os.listdir(args.bag_dir):
         rosbag_path = os.path.join(args.bag_dir, filename)
-
-        # Get Synced Data
-        os.system(f"roslaunch hil save_data_IL.launch input_bag_path:={rosbag_path}")
-        print(f"Processing bag: {rosbag_path}")
         bag_filename = os.path.splitext(os.path.basename(rosbag_path))[0]
         extracted_dir = os.path.dirname(rosbag_path) + "_extracted"
+        # extracted_dir = "/home/yshen47/catkin_ws/src/HIL_Research/scripts/today_bags"
         save_dir = os.path.join(extracted_dir, bag_filename)
         ild = il_data(rosbag_path, save_dir)
-        ild.run_extraction()
-        print("Finished Extraction")
+        if not os.path.exists(ild.bag_info_path):
+            # Get Synced Data
+            os.system(f"roslaunch hil save_data_IL.launch input_bag_path:={rosbag_path}")
+            print(f"Processing bag: {rosbag_path}")
+            
+            ild.run_extraction()
+            print("Finished Extraction")
+        else:
+            print(f"skipping{rosbag_path}")

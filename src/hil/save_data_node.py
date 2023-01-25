@@ -61,10 +61,9 @@ class saveDataNode:
     def pc_im_callback(self, img_msg: Image, depth_msg: Image, cur_gps: Inspva):
         # T_gps = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, convertToTransform=True)
         self.diff += abs(cur_gps.header.stamp.to_sec()-img_msg.header.stamp.to_sec())
-        print(cur_gps.header.stamp.to_sec()-img_msg.header.stamp.to_sec())
+        # print(cur_gps.header.stamp.to_sec()-img_msg.header.stamp.to_sec())
         timestamp = cur_gps.header.stamp
         date = datetime.datetime.utcfromtimestamp(timestamp.to_sec())
-
         gps_out = np.array([
             cur_gps.latitude, 
             cur_gps.longitude,
@@ -72,7 +71,9 @@ class saveDataNode:
             cur_gps.roll,
             cur_gps.pitch,
             cur_gps.azimuth,
-            timestamp.to_sec()
+            timestamp.to_sec(),
+            cur_gps.north_velocity,
+            cur_gps.east_velocity
         ])
         if self.gps_last[0] - gps_out[0] == 0 and self.gps_last[1]-gps_out[1] == 0:
             print(f"Same coord at {iter}")

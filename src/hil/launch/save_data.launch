@@ -8,8 +8,8 @@
     pkg="rosbag" 
     type="play" 
     args="$(arg input_bag_path)
-            --clock -r 0.5
-            --delay=1"
+            --clock -r 1
+            --delay=2"
   />
 
   <include file="$(find hil)/launch/base.launch"/>
