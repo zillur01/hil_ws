@@ -1,0 +1,9 @@
+[submodule "src/hil/src/HIL_realtime_rendering"]
+	path = src/hil/src/HIL_realtime_rendering
+	url = https://github.com/yshen47/HIL_realtime_rendering
+[submodule "src/hil/src/HIL_imitation_learning"]
+	path = src/hil/src/HIL_imitation_learning
+	url = https://github.com/yshen47/HIL_imitation_learning.git
+[submodule "src/hil/src/HIL_modular_autonomy"]
+	path = src/hil/src/HIL_modular_autonomy
+	url = https://github.com/ajzhai/HIL_modular_autonomy.git

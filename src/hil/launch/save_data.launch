@@ -1,6 +1,6 @@
 <launch>
-  <!-- <arg name="input_bag_path" default="/media/bhargav/03E7-EC27/cone_bags/cone2_2022-12-12-16-30-37.bag"/> -->
-  <arg name="input_bag_path" default="/home/bhargav/catkin_ws/src/HIL_Research/src/hil/data/GEM_rosbags/outdoor1.bag"/>
+  <arg name="input_bag_path" default="/home/bhargav/Downloads/straight_pass/straight_2023-01-05-14-05-39.bag"/>
+  <!-- <arg name="input_bag_path" default="/home/bhargav/catkin_ws/src/HIL_Research/src/hil/data/GEM_rosbags/outdoor1.bag"/> -->
 
   <param name="/use_sim_time" value="true"/>
   <node

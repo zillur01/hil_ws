@@ -35,5 +35,7 @@ RUN sudo apt-get install -y ros-noetic-ros-numpy
 RUN sudo apt-get install -y python3-tk
 
 # Python dependencies
+RUN ls
+RUN mkdir $HOME/tmp && export TMPDIR=$HOME/tmp
 COPY requirements.txt /tmp
 RUN pip install -r /tmp/requirements.txt

@@ -48,6 +48,12 @@ class mapNode:
     def pc_im_callback(self, pc_msg: PointCloud2, img_msg: Image):
         # Grab car's relative transform from our World frame origin
         T_gps = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, convertToTransform=True)
+        T_gps = T_gps @ np.array([
+            [0, -1, 0, 0],
+            [1, 0, 0, 0],
+            [0,0,1,0],
+            [0,0,0,1]
+        ])
         # Get current rgb pointcloud(in world coord) from image + lidar + transform inputs
         self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
         orig_pc = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
