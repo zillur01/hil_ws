@@ -15,7 +15,7 @@ SIM_OBSTACLE_POINT = "/insertion/obstacle_point"
 SIM_LATENCY = "/insertion/latency"
 
 #IL
-IL_OUTPUT = "/il/pred_speed"
+IL_OUTPUT = "/il/pred_brake"
 IL_LATENCY = "/il/latency"
 
 #Modular

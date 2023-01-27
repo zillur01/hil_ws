@@ -11,7 +11,7 @@
         type="play" 
         args="/media/bhargav/03E7-EC27/cone_bags/speed_profile/cone2_2022-12-12-16-30-37.bag
                 --clock -r 0.1
-                --delay=3 "
+                --delay=5 "
       />
     </group>
   </group>
