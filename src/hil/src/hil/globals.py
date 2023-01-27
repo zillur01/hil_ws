@@ -8,6 +8,14 @@ GPS_TOPIC = "/gps"
 VIS_MARKER_TOPIC = "/gps_vis_marker"
 OUTPUT_MAP_TOPIC = "/projected"
 
+#Insertion 
+SIM_IMAGE = "/insertion/rendered_image"
+SIM_DEPTH = "/insertion/rendered_depth"
+SIM_OBSTACLE_POINT = "/insertion/obstacle_point"
+SIM_LATENCY = "/insertion/latency"
+
+#IL
+
 # Frame Names
 WORLD_FRAME = "world"
 GPS_FRAME = "gps"

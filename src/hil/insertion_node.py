@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import rospy
+from std_msgs.msg import Float64
 from sensor_msgs.msg import PointCloud2, Image
+from geometry_msgs.msg import PointStamped
 from cv_bridge import CvBridge
 import cv2
 from PIL import Image as pil_img
@@ -25,7 +27,7 @@ import torch.nn.functional as F
 import torch
 
 DEBUG = True
-FRAME_RATE = 2
+FRAME_RATE = 10
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
@@ -44,14 +46,12 @@ class insertionNode:
         self.cur_image_timestamp = None
         self.T_gps = None
         self.projected_pub = rospy.Publisher(OUTPUT_MAP_TOPIC, PointCloud2)
-        self.aug_im_publisher = rospy.Publisher('augmented_image', Image, queue_size=10)
-
+        self.latency_pub = rospy.Publisher(SIM_LATENCY, Float64, queue_size=10)
+        self.sim_im_publisher = rospy.Publisher(SIM_IMAGE, Image, queue_size=10)
+        self.sim_depth_publisher = rospy.Publisher(SIM_DEPTH, Image, queue_size=10)
+        self.sim_obst_publisher = rospy.Publisher(SIM_OBSTACLE_POINT, PointStamped, queue_size=10)
         self.rgb_pointcloud = np.zeros(0, dtype=[('x', float), ('y', float), ('z', float),
                                     ('rgb', np.float32)])
-
-
-        self.tf_listener = tf.TransformListener()
-
         
         # Subscribers
         # self.image_sub = rospy.Subscriber(RGB_TOPIC, Image, callback=self.im_callback)
@@ -99,6 +99,7 @@ class insertionNode:
             ])
         world2cam_gl = cv2gl @ world2cam_cv
         input_img = self.cur_image
+        input_img_stamp = self.cur_image_timestamp
         sensor_data = {
             "rgb": input_img[..., :3].astype(np.float32) / 255,
             "pose": world2cam_gl @ T_blender2opengl,
@@ -111,11 +112,15 @@ class insertionNode:
 
         # Always bind the window framebuffer before calling render
         self.window.use()
-        res_img = self.window.config.render_single_frame(
+        res_img, res_depth, primary_obstacle_pose = self.window.config.render_single_frame(
             sensor_data
         )
+        # obstacle point in local coords
+        obs_x, obs_z, obs_y = primary_obstacle_pose
+        obs_x *= -1
 
         res_img = cv2.cvtColor((res_img[..., :3] * 255.).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        res_depth = np.array(res_depth)
         if DEBUG:
             cv2.imshow("Original", cv2.cvtColor(self.cur_image, cv2.COLOR_RGB2BGR))
             cv2.waitKey(1)
@@ -124,11 +129,29 @@ class insertionNode:
         # End render iter
 
         # publish message
-        aug_img_msg = self.bridge.cv2_to_imgmsg(res_img, encoding="bgr8")
-        aug_img_msg.header.stamp = rospy.Time.now()
-        aug_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
-        self.aug_im_publisher.publish(aug_img_msg)
+        sim_img_msg = self.bridge.cv2_to_imgmsg(res_img, encoding="bgr8")
+        sim_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
+        sim_depth_msg = self.bridge.cv2_to_imgmsg(res_depth, encoding="32FC1")
+        sim_depth_msg.header.frame_id = "zed2_left_camera_optical_frame"
 
+        stamp = rospy.Time.now()
+        sim_img_msg.header.stamp = stamp
+        sim_depth_msg.header.stamp = stamp
+        self.sim_im_publisher.publish(sim_img_msg)
+        self.sim_depth_publisher.publish(sim_depth_msg)
+
+        sim_obst_point = PointStamped()
+        
+        sim_obst_point.header.stamp = rospy.Time.now()
+
+        sim_obst_point.point.x = obs_x
+        sim_obst_point.point.y = obs_y
+        sim_obst_point.point.z = obs_z
+
+        self.sim_obst_publisher.publish(sim_obst_point)
+        latency = stamp.to_sec() - input_img_stamp.to_sec()
+        print("Latency:", latency)
+        self.latency_pub.publish(data=latency)
         self.n_insertion += 1
         current_time, delta = self.timer.next_frame()
         print('frame {}, FPS = {}'.format(self.n_insertion, self.n_insertion / current_time))
@@ -137,7 +160,6 @@ class insertionNode:
 
         if not self.window.is_closing:
             self.window.swap_buffers()
-
     # def pc_insertion(self):
     #     # Pointcloud Insertion
     #     self.model_path = os.path.join(rospack.get_path('hil'), 'data', 'models', "dummy.obj")
