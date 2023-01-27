@@ -1,7 +1,7 @@
 import numpy as np
 # Topic Names
 RGB_TOPIC = "/rgb"
-DEPTH_IM_TOPIC = "/zed2/zed_node/depth/depth_registered"
+DEPTH_IM_TOPIC = "/depth"
 LIDAR_PC_TOPIC = "/cloud"
 CAMERA_INFO_TOPIC = "/camera_info"
 GPS_TOPIC = "/gps"
@@ -15,6 +15,12 @@ SIM_OBSTACLE_POINT = "/insertion/obstacle_point"
 SIM_LATENCY = "/insertion/latency"
 
 #IL
+IL_OUTPUT = "/il/pred_speed"
+IL_LATENCY = "/il/latency"
+
+#Modular
+MODULAR_OUTPUT = "/modular/pred_speed"
+MODULAR_LATENCY = "/modular/latency"
 
 # Frame Names
 WORLD_FRAME = "world"

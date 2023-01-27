@@ -1,5 +1,7 @@
 <launch>
   <arg name="use_bag" default="0"/>
+  <arg name="use_inserted_data" default="0"/>
+
   <group if="$(eval arg('use_bag') ==1)">
     <param name="/use_sim_time" value="true"/>
     <node
@@ -12,12 +14,25 @@
     />
   </group>
   <!-- <include file="$(find hil)/launch/base.launch"/> -->
-  <node name="il_agent" pkg="hil" 
-    type="il_agent_node.py" output="screen">
-    <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
-    <remap from="/cloud" to="/lidar1/velodyne_points"/>
-    <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
-    <remap from="/gps" to="/novatel/inspva"/>
-  </node>
+  <group if="$(eval arg('use_inserted_data') ==1)">
+    <node name="il_agent" pkg="hil" 
+      type="il_agent_node.py" output="screen">
+      <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
+      <remap from="/depth" to="/zed2/zed_node/depth/depth_registered"/>
+      <remap from="/cloud" to="/lidar1/velodyne_points"/>
+      <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
+      <remap from="/gps" to="/novatel/inspva"/>
+    </node>
+  </group>
 
+  <group unless="$(eval arg('use_inserted_data') ==1)">
+    <node name="il_agent" pkg="hil" 
+      type="il_agent_node.py" output="screen">
+      <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
+      <remap from="/depth" to="/insertion/rendered_depth"/>
+      <remap from="/cloud" to="/lidar1/velodyne_points"/>
+      <remap from="/rgb" to="/insertion/rendered_image"/>
+      <remap from="/gps" to="/novatel/inspva"/>
+    </node>
+  </group>
 </launch>

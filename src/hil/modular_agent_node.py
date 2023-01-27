@@ -17,14 +17,13 @@ rendering_lib_path = os.path.join(rospack.get_path('hil'), 'src', 'HIL_modular_a
 sys.path.append(rendering_lib_path)
 os.chdir(rendering_lib_path)
 
-import moderngl_window as mglw
 import torch.nn.functional as F
 import torch
 
 from HIL_modular_autonomy.agent import ModularAgent, dist2d, lla_to_xza
 
 DEBUG = True
-FRAME_RATE = 2
+FRAME_RATE = 8
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
@@ -61,7 +60,7 @@ class modularAgentNode:
         self.cur_spd = None
 
         # Speed Publisher
-        self.pred_speed_pb = rospy.Publisher("modular/pred_speed", VehicleSpeedRpt, queue_size=10)
+        self.pred_speed_pb = rospy.Publisher(MODULAR_OUTPUT, VehicleSpeedRpt, queue_size=10)
 
         # Subscribers
         # self.image_sub = rospy.Subscriber(RGB_TOPIC, Image, callback=self.im_callback)

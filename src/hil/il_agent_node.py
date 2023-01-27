@@ -2,6 +2,7 @@
 import numpy as np
 import rospy
 import message_filters
+from std_msgs.msg import Float64
 from sensor_msgs.msg import PointCloud2, Image
 from novatel_gps_msgs.msg import Inspva
 from pacmod_msgs.msg import PacmodCmd, SystemRptFloat, VehicleSpeedRpt
@@ -20,9 +21,7 @@ os.chdir(il_lib_path)
 from HIL_imitation_learning.main import IL_Agent, save_frames_as_gif, visualize_data
 from HIL_imitation_learning.main import config as il_config
 
-
-
-
+FRAME_RATE = 5
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 
@@ -54,7 +53,9 @@ class ilAgentNode:
         # self.pacmod_speed_sub = rospy.Subscriber("/pacmod/parsed_tx/vehicle_speed_rpt", VehicleSpeedRpt, callback=self.speed_cb)
         
         # Predicted Speed Publisher
-        self.pred_speed_pb = rospy.Publisher("/il/pred_speed", VehicleSpeedRpt, queue_size=10)
+        self.pred_speed_pb = rospy.Publisher(IL_OUTPUT, VehicleSpeedRpt, queue_size=10)
+        self.latency_pub = rospy.Publisher(IL_LATENCY, Float64, queue_size=10)
+
         self.count = 0
         self.start_time = time.time()
         self.last_time = time.time()
@@ -119,13 +120,16 @@ class ilAgentNode:
         rospy.on_shutdown(self.on_shutdown)
 
         self.start_time = rospy.Time.now().to_sec()
-        r = rospy.Rate(5)
+        r = rospy.Rate(FRAME_RATE)
         while not rospy.is_shutdown():
             # print(self.agent.curr_target_timestamp_barrier_count)
             output_data = self.agent.run_prediction()
             if output_data is not None:
                 self.last_time = rospy.Time.now().to_sec()
-                self.latencies.append(abs(self.last_time-self.last_cached_time_s))
+                latency = abs(self.last_time-self.last_cached_time_s)
+                print("Cur Latency", latency)
+                self.latencies.append(latency)
+                self.latency_pub.publish(data=latency)
                 self.publish_pred_speed(output_data['pred_speed'])
                 print("Predicted")
                 self.count += 1
