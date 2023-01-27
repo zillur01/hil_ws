@@ -4,17 +4,19 @@
 
   <group if="$(eval arg('use_bag') ==1)">
     <param name="/use_sim_time" value="true"/>
-    <node
-      name="play" 
-      pkg="rosbag" 
-      type="play" 
-      args="/media/bhargav/03E7-EC27/cone_bags/speed_profile/cone2_2022-12-12-16-30-37.bag
-              --clock -r 1
-              --delay=3 "
-    />
+    <group if="$(eval arg('use_inserted_data') ==0)">
+      <node
+        name="play" 
+        pkg="rosbag" 
+        type="play" 
+        args="/media/bhargav/03E7-EC27/cone_bags/speed_profile/cone2_2022-12-12-16-30-37.bag
+                --clock -r 0.1
+                --delay=3 "
+      />
+    </group>
   </group>
   <!-- <include file="$(find hil)/launch/base.launch"/> -->
-  <group if="$(eval arg('use_inserted_data') ==1)">
+  <group if="$(eval arg('use_inserted_data') ==0)">
     <node name="il_agent" pkg="hil" 
       type="il_agent_node.py" output="screen">
       <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
@@ -25,7 +27,7 @@
     </node>
   </group>
 
-  <group unless="$(eval arg('use_inserted_data') ==1)">
+  <group unless="$(eval arg('use_inserted_data') ==0)">
     <node name="il_agent" pkg="hil" 
       type="il_agent_node.py" output="screen">
       <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
