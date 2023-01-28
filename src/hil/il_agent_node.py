@@ -103,17 +103,18 @@ class ilAgentNode:
         if len(self.gif_frames) > 0:
             save_frames_as_gif(self.gif_frames, 'rosbag_run')
             print("Saved Frames as GIF")
-        fps = self.count / (self.last_time - self.start_time)
-        print(f"fps: {fps}, count: {self.count}, total_time:{(self.last_time - self.start_time)}")
-        print(self.latencies)
-        print(f"Avg latency:{sum(self.latencies)/len(self.latencies)}")
+        # fps = self.count / (self.last_time - self.start_time)
+        # print(f"fps: {fps}, count: {self.count}, total_time:{(self.last_time - self.start_time)}")
+        # print(self.latencies)
+        # print(f"Avg latency:{sum(self.latencies)/len(self.latencies)}")
     
     def run(self):
         rospy.on_shutdown(self.on_shutdown)
         self.start_time = rospy.Time.now().to_sec()
         while self.start_time == 0.0:
             self.start_time = rospy.Time.now().to_sec()
-        print("Start_Time", self.start_time)
+        print("Ros Start_Time", self.start_time)
+        frame_rate_start = time.time()
         r = rospy.Rate(FRAME_RATE)
         while not rospy.is_shutdown():
             # print(self.agent.curr_target_timestamp_barrier_count)
@@ -126,11 +127,11 @@ class ilAgentNode:
                 self.last_time = curr_time
                 latency = abs(curr_time - cache_time)
                 print("Cur_time:", curr_time, "Cur Latency", latency)
-                self.latencies.append(latency)
                 self.latency_pub.publish(data=latency)
                 self.publish_pred_brake(output_data['pred'])
-                print("Predicted Brake:", output_data['pred'])
                 self.count += 1
+                fps = self.count / (time.time() - frame_rate_start)
+                print("fps", fps, "Frame_Count:", self.count, "Predicted Brake:", output_data['pred'])
                 curr_gif_frame = visualize_data(output_data)
                 self.gif_frames.append(curr_gif_frame)
             r.sleep()

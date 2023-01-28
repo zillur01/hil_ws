@@ -12,7 +12,8 @@ omegaconf==2.3.0
 pyglm
 trimesh
 # install torch and torchvision separaetely
-
+# IL
+pytorch-lightning
 # Modular Autonomy Requirements
 EasyDict==1.7
 shapely

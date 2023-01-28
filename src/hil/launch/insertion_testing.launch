@@ -1,12 +1,14 @@
 <launch>
   <arg name="use_bag" default="0"/>
+  <arg name="config_path"/>
+
   <group if="$(eval arg('use_bag') ==1)">
     <param name="/use_sim_time" value="true"/>
     <node
       name="play" 
       pkg="rosbag" 
       type="play" 
-      args="$(find hil)/data/GEM_rosbags/outdoor1.bag
+      args="/home/yshen47/Documents/rosbags/static_path_1.bag
               --clock 
               --delay=5"
     />
@@ -19,6 +21,8 @@
     <remap from="/cloud" to="/lidar1/velodyne_points"/>
     <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
     <remap from="/gps" to="/novatel/inspva"/>
+    <param name="config_path" value="$(arg config_path)" /> 
+
   </node>
 
 </launch>

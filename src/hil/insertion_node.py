@@ -16,16 +16,14 @@ rospack = rospkg.RosPack()
 rendering_lib_path = os.path.join(rospack.get_path('hil'), 'src', 'HIL_realtime_rendering')
 sys.path.append(rendering_lib_path)
 os.chdir(rendering_lib_path)
-from hil.insertionEngine import insertionEngine
 from hil.tf_funcs import get_gps_tf
 from hil.utils import tf_to_transform
 from HIL_realtime_rendering.main import HIL_rendering, setup_window_config, cleanup_window_config, DEFAULT_ARGS
-from HIL_realtime_rendering.main import config as rendering_config
 from HIL_realtime_rendering.constants import T_blender2opengl
 import moderngl_window as mglw
 import torch.nn.functional as F
 import torch
-
+from omegaconf import OmegaConf
 DEBUG = True
 FRAME_RATE = 10
 
@@ -35,10 +33,10 @@ k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 class insertionNode:
     """ Aggregates a global 3D colored pointcloud map
         as the car moves around the environment"""
-    def __init__(self):
+    def __init__(self, omega_config):
         rospy.init_node('insertion', anonymous=True)
-        self.config = rendering_config
-        self.window_size = rendering_config.window_size
+        self.config = omega_config
+        self.window_size = omega_config.window_size
 
         self.bridge = CvBridge()
         self.cur_image = None
@@ -69,8 +67,7 @@ class insertionNode:
         self.n_callback = 0 # numer of times im_depth_callback is called
         # Rendering setup
 
-        self.window, self.config_obj, self.timer = setup_window_config(HIL_rendering, DEFAULT_ARGS, True)
-        self.timer.start()
+        self.window, self.config_obj, self.timer = setup_window_config(HIL_rendering, DEFAULT_ARGS, True, self.config)
 
     def im_depth_callback(self, img_msg: Image, depth_msg: Image, gps_msg: Inspva):
         """Sensor data(rgb, depth, pose) updated as synced messages are received"""
@@ -195,6 +192,8 @@ class insertionNode:
         rospy.on_shutdown(self.on_shutdown)
         print("Starting main insertion loop")
         r = rospy.Rate(FRAME_RATE) # 10hz 
+        self.timer.start()
+
         while not rospy.is_shutdown():
             if  self.cur_image is not None and \
                 self.depth_map is not None and \
@@ -204,7 +203,11 @@ class insertionNode:
             r.sleep()
 
 def main():
-    node = insertionNode()
+    node_name = "insertion"
+    param_name = "config_path"
+    config_path = rospy.get_param(f'{node_name}/{param_name}')
+    custom_config = OmegaConf.load(config_path)
+    node = insertionNode(custom_config)
     node.run()
 
 if __name__ == '__main__':
