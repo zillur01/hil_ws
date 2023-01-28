@@ -22,10 +22,10 @@ def avg(data):
         return -1
     return sum(data)/len(data)
 class metrics_node:
-    def __init__(self, experiment_name, waypoint_csv_path):
+    def __init__(self, waypoint_csv_path, experiment_name):
         rospy.init_node('metrics', anonymous=True)
         # Setup waypoint trajectory info 
-        df_gps = pd.read_csv(waypoint_path)
+        df_gps = pd.read_csv(waypoint_csv_path)
         gps_timestamp = df_gps["field.header.stamp"].tolist()
         gps_timestamp = np.array(gps_timestamp)
         gps_timestamp, ind = np.unique(gps_timestamp, return_index=True)
