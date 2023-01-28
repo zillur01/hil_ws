@@ -119,10 +119,11 @@ class ilAgentNode:
         while not rospy.is_shutdown():
             # print(self.agent.curr_target_timestamp_barrier_count)
             self.is_running_prediction = True
+            if len(self.agent.img_timestamp_cache) > 0:
+                cache_time = self.agent.img_timestamp_cache[-1]
             output_data = self.agent.run_prediction()
             self.is_running_prediction = False
             if output_data is not None:
-                cache_time = self.agent.img_timestamp_cache[-1]
                 curr_time = rospy.Time.now().to_sec() - self.start_time
                 self.last_time = curr_time
                 latency = abs(curr_time - cache_time)

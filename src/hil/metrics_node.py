@@ -8,6 +8,7 @@ from std_msgs.msg import Float64
 from novatel_gps_msgs.msg import Inspva
 from geometry_msgs.msg import PointStamped
 import message_filters 
+import pandas as pd
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
@@ -21,9 +22,17 @@ def avg(data):
         return -1
     return sum(data)/len(data)
 class metrics_node:
-    def __init__(self):
+    def __init__(self, experiment_name, waypoint_csv_path):
         rospy.init_node('metrics', anonymous=True)
-        
+        # Setup waypoint trajectory info 
+        df_gps = pd.read_csv(waypoint_path)
+        gps_timestamp = df_gps["field.header.stamp"].tolist()
+        gps_timestamp = np.array(gps_timestamp)
+        gps_timestamp, ind = np.unique(gps_timestamp, return_index=True)
+        lat = np.array(df_gps["field.latitude"].tolist())[ind]
+        lon = np.array(df_gps["field.longitude"].tolist())[ind]
+        azimuth = np.array(df_gps["field.azimuth"].tolist())[ind]
+
         # Subscribers
         self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
         self.obstacle_pose_sub = message_filters.Subscriber(SIM_OBSTACLE_POINT, PointStamped)
@@ -45,7 +54,7 @@ class metrics_node:
     def sim_latency_cb(self, msg: Float64):
         self.sim_lat.append(msg.data)
     def il_latency_cb(self, msg:Float64):
-        self.sim_il_lat.append(msg.data)
+        self.il_lat.append(msg.data)
     def mod_latency_cb(self, msg: Float64):
         self.mod_lat.append(msg.data)
     def obstacle_dist_cb(self, gps_msg: Inspva, pt_msg: PointStamped):
@@ -66,7 +75,13 @@ class metrics_node:
             r.sleep()
 
 def main():
-    node = metrics_node()
+    node_name = "metrics"
+    param_name = "waypoint_csv_path"
+    waypoint_csv_path = rospy.get_param(f'{node_name}/{param_name}')
+    param_name = "experiment_name"
+    experiment_name = rospy.get_param(f'{node_name}/{param_name}')
+
+    node = metrics_node(waypoint_csv_path, experiment_name)
     node.run()
 
 if __name__ == '__main__':
