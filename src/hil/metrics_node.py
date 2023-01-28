@@ -9,13 +9,24 @@ from novatel_gps_msgs.msg import Inspva
 from geometry_msgs.msg import PointStamped
 import message_filters 
 import pandas as pd
+import utm 
+from pacmod_msgs.msg import PacmodCmd
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 PRINT_RATE = 5
+GOAL_REACHING_THRESH_M = 1
 
 def dist2d(p1, p2):
     return ((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)**0.5
+new_origin_east, new_origin_north = 394702.00, 4438802.00
+
+def ll_to_xy(lat, lon):
+    xza = np.zeros(3)
+    east, north, _, _ = utm.from_latlon(lat, lon)
+    xza[0] = east - new_origin_east
+    xza[1] = north - new_origin_north
+    return xza
 
 def avg(data):
     if len(data) == 0:
@@ -31,8 +42,8 @@ class metrics_node:
         gps_timestamp, ind = np.unique(gps_timestamp, return_index=True)
         lat = np.array(df_gps["field.latitude"].tolist())[ind]
         lon = np.array(df_gps["field.longitude"].tolist())[ind]
-        azimuth = np.array(df_gps["field.azimuth"].tolist())[ind]
-
+        self.start_pt = ll_to_xy(lat[0], lon[0])
+        self.goal_pt = ll_to_xy(lat[-1], lon[-1])
         # Subscribers
         self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
         self.obstacle_pose_sub = message_filters.Subscriber(SIM_OBSTACLE_POINT, PointStamped)
@@ -42,15 +53,24 @@ class metrics_node:
             k_time_sync_slop
             )
         self.obstacle_dist_sub.registerCallback(self.obstacle_dist_cb)
+        self.pt_ego = None
+        self.pt_obst = None 
 
         self.sim_latency_sub = rospy.Subscriber(SIM_LATENCY, Float64, callback=self.sim_latency_cb)
         self.il_latency_sub = rospy.Subscriber(IL_LATENCY, Float64, callback=self.il_latency_cb)
         self.mod_latency_sub = rospy.Subscriber(MODULAR_LATENCY, Float64, callback=self.mod_latency_cb)
+        self.il_pred_brake_sub = rospy.Subscriber(IL_OUTPUT, PacmodCmd, callback=self.il_pred_brake_cb)
 
         self.sim_lat = []
         self.il_lat = []
         self.mod_lat = []
+        self.pred_brake = 0.0
+        self.start_goal_time = None
+        self.end_goal_time = None
+        self.first_brake_pressed = False
 
+    def il_pred_brake_cb(self, msg: PacmodCmd):
+        self.pred_brake = msg.f64_cmd
     def sim_latency_cb(self, msg: Float64):
         self.sim_lat.append(msg.data)
     def il_latency_cb(self, msg:Float64):
@@ -58,20 +78,32 @@ class metrics_node:
     def mod_latency_cb(self, msg: Float64):
         self.mod_lat.append(msg.data)
     def obstacle_dist_cb(self, gps_msg: Inspva, pt_msg: PointStamped):
+        cur_spd = float(np.sqrt(np.square(gps_msg.east_velocity) + np.square(gps_msg.north_velocity)))
+        if cur_spd > 0.1 and self.start_goal_time is None:
+            self.start_goal_time = rospy.Time.now().to_sec()
         (t,Q) = tf_funcs.get_gps_tf(gps_msg)
         T_gps = utils.tf_to_transform(t, Q)
-        pt_ego = T_gps[:3,3]
-        pt_obst = [pt_msg.point.x, pt_msg.point.y, pt_msg.point.z]
-        print("Distance to Primary Obstacle:", dist2d(pt_ego, pt_obst), 
-            "Ego Pt:", pt_ego, "Obstacle Pt:", pt_obst)
+        self.pt_ego = T_gps[:3,3]
+        self.pt_obst = [pt_msg.point.x, pt_msg.point.y, pt_msg.point.z]
+        # print("Distance to Primary Obstacle:", dist2d(pt_ego, pt_obst), 
+        #     "Ego Pt:", pt_ego, "Obstacle Pt:", pt_obst)
     def on_shutdown(self):
         print("Shutting down metrics")
     def run(self):
         rospy.on_shutdown(self.on_shutdown)
-        self.start_time = rospy.Time.now().to_sec()
-        r = rospy.Rate(5)
+        r = rospy.Rate(10)
         while not rospy.is_shutdown():
-            print("Avg Sim Lat:", avg(self.sim_lat), "Avg IL Lat:", avg(self.il_lat), "Avg Mod Lat:", avg(self.mod_lat))
+            if self.start_goal_time is not None:
+                if dist2d(self.pt_ego, self.goal_pt) < GOAL_REACHING_THRESH_M and self.end_goal_time is None:
+                    self.end_goal_time = rospy.Time.now().to_sec() 
+                    print("Reached Goal in", self.end_goal_time-self.start_goal_time)
+                    print("Avg Sim Lat:", avg(self.sim_lat), "Avg IL Lat:", avg(self.il_lat), "Avg Mod Lat:", avg(self.mod_lat))
+
+                if self.pred_brake > 0.4 and not self.first_brake_pressed:
+                    print("First Brake Pressed, obst dist:", dist2d(self.pt_ego, self.pt_obst))
+                    t2goal = rospy.Time.now().to_sec() - self.start_goal_time
+                    print("t2Goal:", t2goal, "Avg Sim Lat:", avg(self.sim_lat), "Avg IL Lat:", avg(self.il_lat), "Avg Mod Lat:", avg(self.mod_lat))
+                    self.first_brake_pressed = True
             r.sleep()
 
 def main():
