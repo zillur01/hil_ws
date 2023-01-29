@@ -6,7 +6,7 @@ from hil import rviz_tools, tf_funcs, utils
 from hil.globals import *
 from std_msgs.msg import Float64
 from novatel_gps_msgs.msg import Inspva
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import PoseArray, Pose
 import message_filters 
 import pandas as pd
 import utm 
@@ -46,7 +46,7 @@ class metrics_node:
         self.goal_pt = ll_to_xy(lat[-1], lon[-1])
         # Subscribers
         self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
-        self.obstacle_pose_sub = message_filters.Subscriber(SIM_OBSTACLE_POINT, PointStamped)
+        self.obstacle_pose_sub = message_filters.Subscriber(SIM_OBSTACLE_POSES, PoseArray)
         self.obstacle_dist_sub = message_filters.ApproximateTimeSynchronizer(
             [self.inspva_sub, self.obstacle_pose_sub], 
             k_time_sync_queue_size, 
@@ -77,14 +77,15 @@ class metrics_node:
         self.il_lat.append(msg.data)
     def mod_latency_cb(self, msg: Float64):
         self.mod_lat.append(msg.data)
-    def obstacle_dist_cb(self, gps_msg: Inspva, pt_msg: PointStamped):
+    def obstacle_dist_cb(self, gps_msg: Inspva, pose_msg: PoseArray):
         cur_spd = float(np.sqrt(np.square(gps_msg.east_velocity) + np.square(gps_msg.north_velocity)))
         if cur_spd > 0.1 and self.start_goal_time is None:
             self.start_goal_time = rospy.Time.now().to_sec()
         (t,Q) = tf_funcs.get_gps_tf(gps_msg)
         T_gps = utils.tf_to_transform(t, Q)
         self.pt_ego = T_gps[:3,3]
-        self.pt_obst = [pt_msg.point.x, pt_msg.point.y, pt_msg.point.z]
+        pt1 = pose_msg.poses[0].position
+        self.pt_obst = [pt1.x, pt1.y, pt1.z]
         # print("Distance to Primary Obstacle:", dist2d(pt_ego, pt_obst), 
         #     "Ego Pt:", pt_ego, "Obstacle Pt:", pt_obst)
     def on_shutdown(self):

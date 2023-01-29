@@ -11,7 +11,8 @@ OUTPUT_MAP_TOPIC = "/projected"
 #Insertion 
 SIM_IMAGE = "/insertion/rendered_image"
 SIM_DEPTH = "/insertion/rendered_depth"
-SIM_OBSTACLE_POINT = "/insertion/obstacle_point"
+SIM_OBSTACLE_POSES = "/insertion/obstacle_poses"
+
 SIM_LATENCY = "/insertion/latency"
 
 #IL

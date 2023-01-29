@@ -1,7 +1,7 @@
 <launch>
   <arg name="use_bag" default="0"/>
-  <arg name="waypoint_csv_path"/>
-  <arg name="experiment_name"/>
+  <arg name="waypoint_csv_path" default="/home/yshen47/Documents/rosbags/static_path1_gps.csv"/>
+  <arg name="experiment_name" default="test"/>
 
   <group if="$(eval arg('use_bag') ==1)">
     <param name="/use_sim_time" value="true"/>

@@ -2,7 +2,7 @@
 import rospy
 from std_msgs.msg import Float64
 from sensor_msgs.msg import PointCloud2, Image
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import PoseArray, Pose, PointStamped
 from cv_bridge import CvBridge
 import cv2
 from PIL import Image as pil_img
@@ -47,7 +47,7 @@ class insertionNode:
         self.latency_pub = rospy.Publisher(SIM_LATENCY, Float64, queue_size=10)
         self.sim_im_publisher = rospy.Publisher(SIM_IMAGE, Image, queue_size=10)
         self.sim_depth_publisher = rospy.Publisher(SIM_DEPTH, Image, queue_size=10)
-        self.sim_obst_publisher = rospy.Publisher(SIM_OBSTACLE_POINT, PointStamped, queue_size=10)
+        self.sim_obst_publisher = rospy.Publisher(SIM_OBSTACLE_POSES, PoseArray, queue_size=10)
         self.rgb_pointcloud = np.zeros(0, dtype=[('x', float), ('y', float), ('z', float),
                                     ('rgb', np.float32)])
         
@@ -109,12 +109,9 @@ class insertionNode:
 
         # Always bind the window framebuffer before calling render
         self.window.use()
-        res_img, res_depth, primary_obstacle_pose = self.window.config.render_single_frame(
+        res_img, res_depth, primary_obstacle_poses = self.window.config.render_single_frame(
             sensor_data
         )
-        # obstacle point in local coords
-        obs_x, obs_z, obs_y = primary_obstacle_pose
-        obs_x *= -1
 
         res_img = cv2.cvtColor((res_img[..., :3] * 255.).astype(np.uint8), cv2.COLOR_RGB2BGR)
         res_depth = np.array(res_depth)
@@ -136,16 +133,24 @@ class insertionNode:
         sim_depth_msg.header.stamp = stamp
         self.sim_im_publisher.publish(sim_img_msg)
         self.sim_depth_publisher.publish(sim_depth_msg)
-
-        sim_obst_point = PointStamped()
+        # obstacle point in local coords
+        pose_array = []
+        for pose in primary_obstacle_poses:
+            T = np.eye(4)
+            obs_x, obs_z, obs_y  = pose
+            obs_x *= -1
+            T[:3,3] = obs_x, obs_y, obs_z
+            pose_array.append(T)
+        self.publish_pose_array(pose_array)
+        # sim_obst_point = PointStamped()
         
-        sim_obst_point.header.stamp = rospy.Time.now()
+        # sim_obst_point.header.stamp = rospy.Time.now()
 
-        sim_obst_point.point.x = obs_x
-        sim_obst_point.point.y = obs_y
-        sim_obst_point.point.z = obs_z
+        # sim_obst_point.point.x = obs_x
+        # sim_obst_point.point.y = obs_y
+        # sim_obst_point.point.z = obs_z
 
-        self.sim_obst_publisher.publish(sim_obst_point)
+        # self.sim_obst_publisher.publish(sim_obst_point)
         latency = stamp.to_sec() - input_img_stamp.to_sec()
         print("Latency:", latency)
         self.latency_pub.publish(data=latency)
@@ -157,6 +162,23 @@ class insertionNode:
 
         if not self.window.is_closing:
             self.window.swap_buffers()
+    def publish_pose_array(self, arr):
+        ros_pose = []
+        for T in arr:
+            (t,Q) = ut.transform_to_tf(T)
+            p = Pose()
+            p.position.x = t[0]
+            p.position.y = t[1]
+            p.position.z = t[2]
+            p.orientation.x = Q[0]
+            p.orientation.y = Q[1]
+            p.orientation.z = Q[2]
+            p.orientation.w = Q[3]
+            ros_pose.append(p)
+        out_msg = PoseArray()
+        out_msg.header.stamp = rospy.Time.now()
+        out_msg.poses = ros_pose
+        self.sim_obst_publisher.publish(out_msg)
     # def pc_insertion(self):
     #     # Pointcloud Insertion
     #     self.model_path = os.path.join(rospack.get_path('hil'), 'data', 'models', "dummy.obj")
