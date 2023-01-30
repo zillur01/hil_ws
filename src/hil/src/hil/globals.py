@@ -1,4 +1,6 @@
 import numpy as np
+
+CRUISE_SPEED = 1.5
 # Topic Names
 RGB_TOPIC = "/rgb"
 DEPTH_IM_TOPIC = "/depth"
@@ -23,6 +25,8 @@ IL_LATENCY = "/il/latency"
 MODULAR_OUTPUT = "/modular/pred_speed"
 MODULAR_LATENCY = "/modular/latency"
 
+#agent output
+AGENT_DESIRED_SPEED = "/agent/desired_speed"
 # Frame Names
 WORLD_FRAME = "world"
 GPS_FRAME = "gps"

@@ -1,7 +1,7 @@
 numpy
 opencv-python
 matplotlib
-pillow
+pillow==9.3.0
 # Insertion Requirements
 objloader
 pyrr
@@ -31,5 +31,6 @@ open3d
 pyransac3d
 matplotlib
 PyQt5
+timm
 # GPS code Requirements
 utm

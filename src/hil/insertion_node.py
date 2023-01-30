@@ -25,7 +25,7 @@ import torch.nn.functional as F
 import torch
 from omegaconf import OmegaConf
 DEBUG = True
-FRAME_RATE = 10
+FRAME_RATE = 50
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
@@ -68,6 +68,7 @@ class insertionNode:
         # Rendering setup
 
         self.window, self.config_obj, self.timer = setup_window_config(HIL_rendering, DEFAULT_ARGS, True, self.config)
+        self.call_insert = False
 
     def im_depth_callback(self, img_msg: Image, depth_msg: Image, gps_msg: Inspva):
         """Sensor data(rgb, depth, pose) updated as synced messages are received"""
@@ -77,14 +78,17 @@ class insertionNode:
         # cv2.waitKey(1)
         self.cur_image = np.array(pil_img.fromarray(cv2_rgb_image).resize(size=self.window_size, resample=pil_img.Resampling.BILINEAR))
         self.cur_image_timestamp = img_msg.header.stamp
+        # cv2.imshow("Original", cv2.cvtColor(self.cur_image, cv2.COLOR_RGB2BGR))
+        # cv2.waitKey(1)
         mode_depth='F'
         orig_depth_map = np.asarray(pil_img.frombytes(mode_depth, (depth_msg.width, depth_msg.height), depth_msg.data))
         self.depth_map = F.interpolate(torch.from_numpy(np.nan_to_num(orig_depth_map, nan=np.inf, posinf=np.inf, neginf=np.inf)[None, None]), scale_factor=0.5).numpy()[0][0]
         (t,Q) = get_gps_tf(gps_msg)
         self.T_gps = tf_to_transform(t, Q)
-
+        self.call_insert = True
     def img_insertion(self):
         # cam2world = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, common_t = self.cur_image_timestamp, convertToTransform=True)
+        start_time = time.time()
         cam2world = self.T_gps
         world2cam_cv = np.linalg.inv(cam2world)
 
@@ -96,32 +100,47 @@ class insertionNode:
             ])
         world2cam_gl = cv2gl @ world2cam_cv
         input_img = self.cur_image
+
         input_img_stamp = self.cur_image_timestamp
+        print(rospy.Time.now().to_sec())
+        print("img delay", rospy.Time.now().to_sec()-input_img_stamp.to_sec())
         sensor_data = {
             "rgb": input_img[..., :3].astype(np.float32) / 255,
             "pose": world2cam_gl @ T_blender2opengl,
             "depth": self.depth_map
         }
 
+        print("Getting sensor", time.time()-start_time)
+        start_time = time.time()
         # Rendering iteration
         if self.config_obj.clear_color is not None:
             self.window.clear(*self.config_obj.clear_color)
 
         # Always bind the window framebuffer before calling render
         self.window.use()
+        temp = np.copy(input_img)
         res_img, res_depth, primary_obstacle_poses = self.window.config.render_single_frame(
             sensor_data
         )
+        # cv2.imshow("temp", cv2.cvtColor(temp, cv2.COLOR_RGB2BGR))
+        # cv2.waitKey(1)
+        # cv2.imshow("cur_image", cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
+        # cv2.waitKey(1)
+        print("render single frame", time.time()-start_time)
+        start_time = time.time()
 
         res_img = cv2.cvtColor((res_img[..., :3] * 255.).astype(np.uint8), cv2.COLOR_RGB2BGR)
-        res_depth = np.array(res_depth)
+        res_depth = np.array(res_depth.cpu())
+        print("img/depth format converison", time.time()-start_time)
+
         if DEBUG:
-            cv2.imshow("Original", cv2.cvtColor(self.cur_image, cv2.COLOR_RGB2BGR))
+            print(input_img.shape)
+            cv2.imshow("Original", cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
             cv2.waitKey(1)
             cv2.imshow("Inserted", res_img)
             cv2.waitKey(1)
         # End render iter
-
+        start_time = time.time()
         # publish message
         sim_img_msg = self.bridge.cv2_to_imgmsg(res_img, encoding="bgr8")
         sim_img_msg.header.frame_id = "zed2_left_camera_optical_frame"
@@ -133,6 +152,8 @@ class insertionNode:
         sim_depth_msg.header.stamp = stamp
         self.sim_im_publisher.publish(sim_img_msg)
         self.sim_depth_publisher.publish(sim_depth_msg)
+        print("publish time", time.time()-start_time)
+
         # obstacle point in local coords
         pose_array = []
         for pose in primary_obstacle_poses:
@@ -142,26 +163,21 @@ class insertionNode:
             T[:3,3] = obs_x, obs_y, obs_z
             pose_array.append(T)
         self.publish_pose_array(pose_array)
-        # sim_obst_point = PointStamped()
-        
-        # sim_obst_point.header.stamp = rospy.Time.now()
 
-        # sim_obst_point.point.x = obs_x
-        # sim_obst_point.point.y = obs_y
-        # sim_obst_point.point.z = obs_z
-
-        # self.sim_obst_publisher.publish(sim_obst_point)
+        start_time = time.time()
         latency = stamp.to_sec() - input_img_stamp.to_sec()
         print("Latency:", latency)
         self.latency_pub.publish(data=latency)
         self.n_insertion += 1
         current_time, delta = self.timer.next_frame()
         print('frame {}, FPS = {}'.format(self.n_insertion, self.n_insertion / current_time))
-
-        # rospy.loginfo(f"avg time at {self.n}: {self.n/self.total_time} fps")
-
+        print("latency publish", time.time()-start_time)
+        start_time = time.time()
         if not self.window.is_closing:
             self.window.swap_buffers()
+        print("swap buffers", time.time()-start_time)
+        self.call_insert = False
+
     def publish_pose_array(self, arr):
         ros_pose = []
         for T in arr:
@@ -215,14 +231,18 @@ class insertionNode:
         print("Starting main insertion loop")
         r = rospy.Rate(FRAME_RATE) # 10hz 
         self.timer.start()
-
         while not rospy.is_shutdown():
-            if  self.cur_image is not None and \
-                self.depth_map is not None and \
-                self.T_gps is not None:
+            if self.call_insert:
                 print("inserting")
                 self.img_insertion()
-            r.sleep()
+            time.sleep(0.05)
+        # while not rospy.is_shutdown():
+        #     if  self.cur_image is not None and \
+        #         self.depth_map is not None and \
+        #         self.T_gps is not None:
+        #         print("inserting")
+        #         self.img_insertion()
+        #     r.sleep()
 
 def main():
     node_name = "insertion"

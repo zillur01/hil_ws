@@ -5,7 +5,7 @@ import message_filters
 from std_msgs.msg import Float64
 from sensor_msgs.msg import PointCloud2, Image
 from novatel_gps_msgs.msg import Inspva
-from pacmod_msgs.msg import PacmodCmd
+from pacmod_msgs.msg import PacmodCmd, VehicleSpeedRpt
 from cv_bridge import CvBridge
 from hil.utils import *
 from hil.tf_funcs import get_gps_tf
@@ -24,6 +24,9 @@ from HIL_imitation_learning.ros_main import il_config
 FRAME_RATE = 10
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
+BRAKE_THRESHOLD = 0.05
+CRUISE_SPEED = 3.0 # 1.5
+k_brake_gain = 1
 
 class ilAgentNode:
     def __init__(self):
@@ -50,12 +53,14 @@ class ilAgentNode:
         # Predicted Speed Publisher
         self.pred_speed_pb = rospy.Publisher(IL_OUTPUT, PacmodCmd, queue_size=10)
         self.latency_pub = rospy.Publisher(IL_LATENCY, Float64, queue_size=10)
+        self.desired_speed_pb = rospy.Publisher("/il/desired_speed", VehicleSpeedRpt, queue_size=10)
 
         self.count = 0
         
         self.last_cached_time_s = None
         self.latencies = [] # diff between last_cached_time_s and last_time every time a frame is saved
         self.is_running_prediction = False
+        self.cur_speed = 0
         print("Node is Ready")
     # def accel_cb(self, cmd_msg: PacmodCmd):
     #     pass
@@ -66,7 +71,6 @@ class ilAgentNode:
                 stamp,
                 cmd_msg.f64_cmd
             )
-
     # def steer_cb(self, steer_msg: SystemRptFloat):
     #     self.agent.add_steer_data(
     #         steer_msg.header.stamp.to_nsec(),
@@ -79,6 +83,7 @@ class ilAgentNode:
             gps_stamp = np.float32(gps_msg.header.stamp.to_sec() - self.start_time)
             if len(self.agent.R_timestamp_cache)==0 or gps_stamp > self.agent.R_timestamp_cache[-1]:
                 tot_speed = float(np.sqrt(np.square(gps_msg.east_velocity) + np.square(gps_msg.north_velocity)))
+                self.cur_speed = tot_speed
                 (t,Q) = get_gps_tf(gps_msg)
                 pose = tf_to_transform(t, Q)
                 
@@ -93,10 +98,20 @@ class ilAgentNode:
             self.agent.add_img_data(stamp, cur_image)
 
     def publish_pred_brake(self, brake_val):
-        speed_msg = PacmodCmd()
+        brake_msg = PacmodCmd()
+        brake_msg.header.stamp = rospy.Time.now()
+        brake_msg.f64_cmd = brake_val
+        self.pred_speed_pb.publish(brake_msg)
+
+        desired_speed = CRUISE_SPEED
+        if brake_val > BRAKE_THRESHOLD:
+            # desired_speed = max(self.cur_speed - k_brake_gain * brake_val, 0)
+            desired_speed = 0.0
+        speed_msg = VehicleSpeedRpt()
         speed_msg.header.stamp = rospy.Time.now()
-        speed_msg.f64_cmd = brake_val
-        self.pred_speed_pb.publish(speed_msg)
+        speed_msg.vehicle_speed = desired_speed
+        speed_msg.vehicle_speed_valid = True
+        self.desired_speed_pb.publish(speed_msg)
     
     def on_shutdown(self):
         print(len(self.gif_frames))

@@ -9,7 +9,7 @@
         name="play" 
         pkg="rosbag" 
         type="play" 
-        args="/media/yshen47/easystore/IL_Data/cone_il/cone2_2022-12-12-16-31-56.bag
+        args="/home/gem/HIL_Research/rosbags/static_path_1.bag
                 --clock -r 1
                 --delay=5 "
       />
