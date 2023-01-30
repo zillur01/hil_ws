@@ -155,14 +155,15 @@ class insertionNode:
         print("publish time", time.time()-start_time)
 
         # obstacle point in local coords
-        pose_array = []
-        for pose in primary_obstacle_poses:
-            T = np.eye(4)
-            obs_x, obs_z, obs_y  = pose
-            obs_x *= -1
-            T[:3,3] = obs_x, obs_y, obs_z
-            pose_array.append(T)
-        self.publish_pose_array(pose_array)
+        # pose_array = []
+        # for pose in primary_obstacle_poses:
+            # T = np.eye(4)
+            # obs_x, obs_z, obs_y  = pose
+            # obs_x *= -1
+            # T[:3,3] = obs_x, obs_y, obs_z
+            # pose_array.append(T)
+        # self.publish_pose_array(pose_array)
+        self.publish_pose_array(primary_obstacle_poses)
 
         start_time = time.time()
         latency = stamp.to_sec() - input_img_stamp.to_sec()
