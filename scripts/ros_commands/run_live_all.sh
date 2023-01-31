@@ -1,8 +1,8 @@
-EXPERIMENT_NAME="il_exp_1_scen_1_chair_1"
+EXPERIMENT_NAME="human_driver/exp5_scen_1_path_fast_3"
 
-WAYPOINT_CSV="/home/gem/HIL_Research/rosbags/waypoints/static_path_1.csv"
+WAYPOINT_CSV="/home/gem/HIL_Research/rosbags/waypoints/jaywalker.csv"
 CONFIG_DIR="/home/gem/HIL_Research/src/hil/src/HIL_realtime_rendering/configs"
-RENDERING_CONFIG="$CONFIG_DIR"/exp_1/scen_1/path_1.yaml
+RENDERING_CONFIG="$CONFIG_DIR"/exp_5/scen_1/path_fast_3.yaml
 INSERTION="roslaunch hil insertion_testing.launch use_bag:=0 config_path:=$RENDERING_CONFIG"
 MODULAR="roslaunch hil modular_agent.launch use_bag:=0 use_inserted_data:=1 waypoint_csv_path:=$WAYPOINT_CSV"
 IL_AGENT="roslaunch hil il_agent.launch use_bag:=0 use_inserted_data:=1"
@@ -17,7 +17,8 @@ ROSBAG_RECORD="rosbag record -O experiments/$EXPERIMENT_NAME \
 mkdir -p experiments
 gnome-terminal --tab -- $INSERTION 
 sleep 1
-gnome-terminal --tab -- $IL_AGENT 
+# SWITCH THE COMMENT BASED ON WHICH AGENT YOU WANT TO TEST
+# gnome-terminal --tab -- $IL_AGENT 
 # gnome-terminal --tab -- $MODULAR 
 sleep 1
 gnome-terminal --tab -- $METRICS 

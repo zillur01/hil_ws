@@ -8,7 +8,7 @@
       name="play" 
       pkg="rosbag" 
       type="play" 
-      args="/home/gem/HIL_Research/rosbags/static_path_2_1.bag
+      args="/home/gem/bagfiles/right_jaywalker/jaywalker.bag
               --clock 
               --delay=5"
     />

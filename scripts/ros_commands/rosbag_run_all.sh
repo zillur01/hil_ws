@@ -2,7 +2,7 @@ EXPERIMENT_NAME="il_test"
 
 WAYPOINT_CSV="/home/gem/HIL_Research/rosbags/waypoints/static_path_2_1.csv"
 CONFIG_DIR="/home/gem/HIL_Research/src/hil/src/HIL_realtime_rendering/configs"
-RENDERING_CONFIG="$CONFIG_DIR"/exp_1/scen_1/path_1.yaml
+RENDERING_CONFIG="$CONFIG_DIR"/exp_5/scen_3/path_slow_3.yaml
 INSERTION="roslaunch hil insertion_testing.launch use_bag:=1 config_path:=$RENDERING_CONFIG"
 MODULAR="roslaunch hil modular_agent.launch use_bag:=1 use_inserted_data:=1 waypoint_csv_path:=$WAYPOINT_CSV"
 IL_AGENT="roslaunch hil il_agent.launch use_bag:=1 use_inserted_data:=1"
@@ -16,10 +16,10 @@ ROSBAG_RECORD="rosbag record -O experiments/$EXPERIMENT_NAME \
                /insertion/latency /il/latency /modular/latency"
 mkdir -p experiments
 gnome-terminal --tab -- $INSERTION 
-sleep 2
+sleep 1
 gnome-terminal --tab -- $IL_AGENT 
 # gnome-terminal --tab -- $MODULAR 
-sleep 2
-gnome-terminal --tab -- $METRICS 
-sleep 2
+# sleep 2
+# gnome-terminal --tab -- $METRICS 
+sleep 3
 gnome-terminal --tab -- $ROSBAG_RECORD 
