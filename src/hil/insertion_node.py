@@ -6,9 +6,9 @@ from geometry_msgs.msg import PoseArray, Pose, PointStamped
 from cv_bridge import CvBridge
 import cv2
 from PIL import Image as pil_img
-import hil.utils as ut
-from hil.tf_funcs import *
-from hil.globals import *
+import src.hil.utils as ut
+from src.hil.tf_funcs import *
+from src.hil.globals import *
 import tf, message_filters
 import os, time, sys
 import rospkg
@@ -16,10 +16,10 @@ rospack = rospkg.RosPack()
 rendering_lib_path = os.path.join(rospack.get_path('hil'), 'src', 'HIL_realtime_rendering')
 sys.path.append(rendering_lib_path)
 os.chdir(rendering_lib_path)
-from hil.tf_funcs import get_gps_tf
-from hil.utils import tf_to_transform
-from HIL_realtime_rendering.main import HIL_rendering, setup_window_config, cleanup_window_config, DEFAULT_ARGS
-from HIL_realtime_rendering.constants import T_blender2opengl
+from src.hil.tf_funcs import get_gps_tf
+from src.hil.utils import tf_to_transform
+from src.HIL_realtime_rendering.main import HIL_rendering, setup_window_config, cleanup_window_config, DEFAULT_ARGS
+from src.HIL_realtime_rendering.constants import T_blender2opengl
 import moderngl_window as mglw
 import torch.nn.functional as F
 import torch
