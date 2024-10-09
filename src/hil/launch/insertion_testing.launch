@@ -1,6 +1,6 @@
 <launch>
   <arg name="use_bag" default="0"/>
-  <arg name="config_path" default="/home/gem/HIL_Research/src/hil/src/HIL_realtime_rendering/configs/exp_1/scen_1/path_1.yaml"/>
+  <arg name="config_path" default="/home/ashwath/HIL_Research/src/hil/src/HIL_realtime_rendering/configs/exp_1/scen_1/path_1.yaml"/>
 
   <group if="$(eval arg('use_bag') ==1)">
     <param name="/use_sim_time" value="true"/>
@@ -8,7 +8,7 @@
       name="play" 
       pkg="rosbag" 
       type="play" 
-      args="/home/gem/bagfiles/right_jaywalker/jaywalker.bag
+      args="/home/ashwath/rosbags/jaywalker.bag
               --clock 
               --delay=5"
     />

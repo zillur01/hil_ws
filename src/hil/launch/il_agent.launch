@@ -9,7 +9,7 @@
         name="play" 
         pkg="rosbag" 
         type="play" 
-        args="/home/gem/HIL_Research/rosbags/static_path_1.bag
+        args="/home/ashwath/HIL_Research/rosbags/static_path_1.bag
                 --clock -r 1
                 --delay=5 "
       />

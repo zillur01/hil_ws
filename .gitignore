@@ -4,7 +4,7 @@ logs/
 .catkin_tools/
 colmap/
 data/
-
+/assets/
 
 *.bag
 *.jpg
