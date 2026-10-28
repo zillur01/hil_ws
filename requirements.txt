@@ -2,14 +2,15 @@
 # HIL_modular_autonomy, PIDNet/SparseInst). Replaces the old Docker-era requirements and the
 # per-package requirements in src/hil/src/HIL_modular_autonomy and src/hil/src/HIL_realtime_rendering.
 #
-# Target: Python 3.12 (Ubuntu 24.04 / ROS 2 Jazzy) in a virtualenv, e.g.
-#   python3 -m venv --system-site-packages ~/venvs/hil && source ~/venvs/hil/bin/activate
-#   (--system-site-packages so the venv can see ROS packages: rclpy, cv_bridge, message_filters, ...)
+# Target: ROS 2 Humble, Ubuntu 22.04, system Python 3.10, in a virtualenv:
+#   /usr/bin/python3.10 -m venv --system-site-packages ~/venvs/hil && source ~/venvs/hil/bin/activate
+#   (--system-site-packages so the venv can see the ROS packages: rclpy, cv_bridge, message_filters, ...;
+#    it must be the system python3.10 that ROS 2 Humble was built for)
 #   pip install -r requirements.txt
 #
 # NOT installable with pip (come from ROS / system):
-#   rospy, rclpy, cv_bridge, message_filters, tf, rospkg, ros_numpy, sensor_msgs, geometry_msgs,
-#   septentrio_gnss_driver, pacmod2_msgs  (ROS packages)
+#   rclpy, cv_bridge, message_filters, sensor_msgs, std_msgs, septentrio_gnss_driver, pacmod2_msgs
+#   (ROS 2 packages; the ROS1-only nodes in src/hil also need rospy/tf/ros_numpy, not covered here)
 #   Blender's `bpy` is only needed to author new assets (models/blender), not to run anything here.
 #
 # Install separately, in this order, BEFORE the rest if you need a specific CUDA build:
@@ -20,7 +21,7 @@
 #      (this also brings fvcore and pycocotools)
 
 # ---- core ----
-numpy
+numpy<2             # ROS 2 Humble's cv_bridge is compiled against numpy 1.x
 scipy
 pandas
 matplotlib
@@ -31,9 +32,6 @@ opencv-python
 pymap3d              # lat/lon -> local ENU frame (hil/origin.py), same lib as gem_gnss_control
 torch
 torchvision
-
-# ---- ROS bag conversion (ROS 2 bag -> ROS 1 bag, pure python, no ROS needed) ----
-rosbags
 
 # ---- HIL_realtime_rendering (virtual object insertion) ----
 moderngl==5.7.2
