@@ -1,4 +1,6 @@
 <launch>
+  <!-- TODO(USER): check the /zed2/... remaps below match your ZED topic names (e.g. /zed/zed_node/...).
+       GNSS + speed topics (/navsatfix, /insnavgeod, /pacmod/vehicle_speed_rpt) are fixed in hil/globals.py. -->
   <arg name="use_bag" default="0"/>
   <arg name="use_inserted_data" default="0"/>
 
@@ -23,7 +25,6 @@
       <remap from="/depth" to="/zed2/zed_node/depth/depth_registered"/>
       <remap from="/cloud" to="/lidar1/velodyne_points"/>
       <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
-      <remap from="/gps" to="/novatel/inspva"/>
     </node>
   </group>
 
@@ -34,7 +35,6 @@
       <remap from="/depth" to="/insertion/rendered_depth"/>
       <remap from="/cloud" to="/lidar1/velodyne_points"/>
       <remap from="/rgb" to="/insertion/rendered_image"/>
-      <remap from="/gps" to="/novatel/inspva"/>
     </node>
   </group>
 </launch>

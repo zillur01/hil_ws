@@ -1,4 +1,6 @@
 <launch>
+  <!-- TODO(USER): check the /zed2/... remaps below match your ZED topic names (e.g. /zed/zed_node/...).
+       GNSS + speed topics (/navsatfix, /insnavgeod, /pacmod/vehicle_speed_rpt) are fixed in hil/globals.py. -->
   <param name="/use_sim_time" value="true"/>
   <node
     name="play" 
@@ -16,7 +18,6 @@
     <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
     <remap from="/cloud" to="/lidar1/velodyne_points"/>
     <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
-    <remap from="/gps" to="/novatel/inspva"/>
   </node>
 
 </launch>

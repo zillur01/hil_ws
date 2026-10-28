@@ -1,7 +1,6 @@
-from constants import T_blender2opengl, UTM_ORIGIN_EAST, UTM_ORIGIN_NORTH, ORIGIN_HEIGHT
+from constants import T_blender2opengl
 from pathlib import Path
 import numpy as np
-import utm
 from scipy.spatial.transform import Rotation as R
 from PIL import Image
 from tqdm import tqdm

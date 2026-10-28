@@ -1,7 +1,7 @@
-from constants import T_blender2opengl, UTM_ORIGIN_EAST, UTM_ORIGIN_NORTH, ORIGIN_HEIGHT
+from constants import T_blender2opengl, ORIGIN_LATITUDE, ORIGIN_LONGITUDE, ORIGIN_HEIGHT
 from pathlib import Path
 import numpy as np
-import utm
+import pymap3d as pm
 from scipy.spatial.transform import Rotation as R
 from PIL import Image
 from tqdm import tqdm
@@ -92,14 +92,10 @@ class DataLoader:
         # sites = np.array([pvlib.location.Location(lat, lon) for (lat,lon) in zip(lat,lon)])
         # sun_poses = [sites[i].get_solarposition(dates[i]) for i in range(n_frames)]
         # print(type(sun_poses[0]))
-        utm_data = utm.from_latlon(lat, lon)
-        east, north = utm_data[0], utm_data[1]
+        # local ENU (east, north, up) in metres from the shared origin (see constants.py)
+        east, north, height = pm.geodetic2enu(lat, lon, height, ORIGIN_LATITUDE, ORIGIN_LONGITUDE, ORIGIN_HEIGHT)
 
         # ----------------------------------------
-        # normalize positions, center at (0, 0, 0)
-        east -= UTM_ORIGIN_EAST
-        north -= UTM_ORIGIN_NORTH
-        height -= ORIGIN_HEIGHT
         pos = np.stack([east, north, height]).T  # position (n, 3)
 
         euler = np.stack([pitch, roll, -azimuth]).T

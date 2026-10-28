@@ -18,6 +18,7 @@ sys.path.append(rendering_lib_path)
 os.chdir(rendering_lib_path)
 from hil.tf_funcs import get_gps_tf
 from hil.utils import tf_to_transform
+from hil.gnss import GnssState
 from HIL_realtime_rendering.main import HIL_rendering, setup_window_config, cleanup_window_config, DEFAULT_ARGS
 from HIL_realtime_rendering.constants import T_blender2opengl
 import moderngl_window as mglw
@@ -55,10 +56,11 @@ class insertionNode:
         # self.image_sub = rospy.Subscriber(RGB_TOPIC, Image, callback=self.im_callback)
         self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
         self.depth_sub = message_filters.Subscriber(DEPTH_IM_TOPIC, Image)
-        self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
+        # Pose comes from the latest /navsatfix + /insnavgeod (local ENU frame, see hil/origin.py)
+        self.gnss = GnssState()
 
         self.im_depth_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.image_sub, self.depth_sub, self.inspva_sub], 
+            [self.image_sub, self.depth_sub], 
             k_time_sync_queue_size, 
             k_time_sync_slop
             )
@@ -70,8 +72,11 @@ class insertionNode:
         self.window, self.config_obj, self.timer = setup_window_config(HIL_rendering, DEFAULT_ARGS, True, self.config)
         self.call_insert = False
 
-    def im_depth_callback(self, img_msg: Image, depth_msg: Image, gps_msg: Inspva):
+    def im_depth_callback(self, img_msg: Image, depth_msg: Image):
         """Sensor data(rgb, depth, pose) updated as synced messages are received"""
+        gnss = self.gnss.snapshot()
+        if gnss is None:
+            return
         # print("received data")
         cv2_rgb_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
         # cv2.imshow("res2", cv2_rgb_image)
@@ -83,7 +88,7 @@ class insertionNode:
         mode_depth='F'
         orig_depth_map = np.asarray(pil_img.frombytes(mode_depth, (depth_msg.width, depth_msg.height), depth_msg.data))
         self.depth_map = F.interpolate(torch.from_numpy(np.nan_to_num(orig_depth_map, nan=np.inf, posinf=np.inf, neginf=np.inf)[None, None]), scale_factor=0.5).numpy()[0][0]
-        (t,Q) = get_gps_tf(gps_msg)
+        (t,Q) = get_gps_tf(gnss)
         self.T_gps = tf_to_transform(t, Q)
         self.call_insert = True
     def img_insertion(self):

@@ -5,11 +5,10 @@ import rospy
 from hil import rviz_tools, tf_funcs, utils
 from hil.globals import *
 from std_msgs.msg import Float64
-from novatel_gps_msgs.msg import Inspva
+from hil.gnss import GnssState
+from hil.origin import load_local_waypoints
 from geometry_msgs.msg import PoseArray, Pose
 import message_filters 
-import pandas as pd
-import utm 
 from pacmod_msgs.msg import PacmodCmd
 
 k_time_sync_queue_size = 10
@@ -19,14 +18,6 @@ GOAL_REACHING_THRESH_M = 1
 
 def dist2d(p1, p2):
     return ((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)**0.5
-new_origin_east, new_origin_north = 394702.00, 4438802.00
-
-def ll_to_xy(lat, lon):
-    xza = np.zeros(3)
-    east, north, _, _ = utm.from_latlon(lat, lon)
-    xza[0] = east - new_origin_east
-    xza[1] = north - new_origin_north
-    return xza
 
 def avg(data):
     if len(data) == 0:
@@ -35,24 +26,13 @@ def avg(data):
 class metrics_node:
     def __init__(self, waypoint_csv_path, experiment_name):
         rospy.init_node('metrics', anonymous=True)
-        # Setup waypoint trajectory info 
-        df_gps = pd.read_csv(waypoint_csv_path)
-        gps_timestamp = df_gps["field.header.stamp"].tolist()
-        gps_timestamp = np.array(gps_timestamp)
-        gps_timestamp, ind = np.unique(gps_timestamp, return_index=True)
-        lat = np.array(df_gps["field.latitude"].tolist())[ind]
-        lon = np.array(df_gps["field.longitude"].tolist())[ind]
-        self.start_pt = ll_to_xy(lat[0], lon[0])
-        self.goal_pt = ll_to_xy(lat[-1], lon[-1])
+        # Waypoints recorded in the local ENU frame (x, y, heading_deg, header-less CSV)
+        wps = load_local_waypoints(waypoint_csv_path)
+        self.start_pt = wps[0]
+        self.goal_pt = wps[-1]
         # Subscribers
-        self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
-        self.obstacle_pose_sub = message_filters.Subscriber(SIM_OBSTACLE_POSES, PoseArray)
-        self.obstacle_dist_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.inspva_sub, self.obstacle_pose_sub], 
-            k_time_sync_queue_size, 
-            k_time_sync_slop
-            )
-        self.obstacle_dist_sub.registerCallback(self.obstacle_dist_cb)
+        self.gnss = GnssState()
+        self.obstacle_pose_sub = rospy.Subscriber(SIM_OBSTACLE_POSES, PoseArray, callback=self.obstacle_dist_cb)
         self.pt_ego = None
         self.pt_obst = None 
 
@@ -77,8 +57,11 @@ class metrics_node:
         self.il_lat.append(msg.data)
     def mod_latency_cb(self, msg: Float64):
         self.mod_lat.append(msg.data)
-    def obstacle_dist_cb(self, gps_msg: Inspva, pose_msg: PoseArray):
-        cur_spd = float(np.sqrt(np.square(gps_msg.east_velocity) + np.square(gps_msg.north_velocity)))
+    def obstacle_dist_cb(self, pose_msg: PoseArray):
+        gps_msg = self.gnss.snapshot()
+        if gps_msg is None:
+            return
+        cur_spd = float(gps_msg.speed) # PACMod vehicle speed
         if cur_spd > 0.1 and self.start_goal_time is None:
             self.start_goal_time = rospy.Time.now().to_sec()
         (t,Q) = tf_funcs.get_gps_tf(gps_msg)

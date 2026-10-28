@@ -153,3 +153,8 @@ dmypy.json
 *.ckpt
 src/hil/src/HIL_realtime_rendering/assets/*
 src/hil/src/HIL_realtime_rendering/kitti360/*
+
+# Renderer: generated outputs and downloaded sequences
+src/hil/src/HIL_realtime_rendering/outputs/
+src/hil/src/HIL_realtime_rendering/ros_sequences/
+src/hil/src/HIL_realtime_rendering/data_2d_raw/

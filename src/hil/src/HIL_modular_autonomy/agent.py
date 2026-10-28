@@ -5,21 +5,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import time
-import utm
 
 from segmodels import load_sparseinst_model, load_pidnet_model, preprocess_rgb_pidnet, cmap, semseg_cmap
 from matching import data_association
 from detectron2.data.detection_utils import read_image
 
 
-new_origin_east, new_origin_north = 394702.00, 4438802.00
+# Local ENU frame shared with the whole repo (origin = gem_gnss_control e2_pp.yaml origin).
+from hil.origin import latlon_to_local
 
 
 def lla_to_xza(lat, lon, ang):
+    """(lat, lon, compass heading in deg) -> [x east (m), y north (m), heading (rad)]"""
     xza = np.zeros(3)
-    east, north, _, _ = utm.from_latlon(lat, lon)
-    xza[0] = east - new_origin_east
-    xza[1] = north - new_origin_north
+    xza[0], xza[1] = latlon_to_local(lat, lon)
     xza[2] = ang * np.pi / 180.
     return xza
     
@@ -108,9 +107,6 @@ class ModularAgent:
              [0, 527.5779418945312, 359.2155456542969 - self.i1],
              [0, 0, 1]]
         )
-        
-        # Custom coordinate system
-        self.new_origin_east, self.new_origin_north = 394702.00, 4438802.00
         
         # Tracking parameters
         self.min_hits = 3

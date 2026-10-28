@@ -3,13 +3,14 @@ import numpy as np
 import rospy
 import message_filters
 from sensor_msgs.msg import PointCloud2, Image
-from novatel_gps_msgs.msg import Inspva
 import ros_numpy
 from cv_bridge import CvBridge
 import cv2
 from hil.utils import *
 from hil.tf_funcs import *
 from hil.globals import *
+from hil.gnss import GnssState
+from hil import origin
 import rospkg
 import os
 import datetime 
@@ -44,11 +45,11 @@ class saveDataNode:
         
         self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
         self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
-        self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
+        self.gnss = GnssState()
         self.depth_sub = message_filters.Subscriber(DEPTH_IM_TOPIC, Image)
 
         self.pc_im_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.image_sub, self.depth_sub, self.inspva_sub], 
+            [self.image_sub, self.depth_sub], 
             k_time_sync_queue_size, 
             k_time_sync_slop
             )
@@ -58,22 +59,24 @@ class saveDataNode:
         self.tf_listener = tf.TransformListener()
         self.gps_last = np.zeros(7)
 
-    def pc_im_callback(self, img_msg: Image, depth_msg: Image, cur_gps: Inspva):
+    def pc_im_callback(self, img_msg: Image, depth_msg: Image):
+        cur_gps = self.gnss.snapshot()
+        if cur_gps is None:
+            return
         # T_gps = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, convertToTransform=True)
-        self.diff += abs(cur_gps.header.stamp.to_sec()-img_msg.header.stamp.to_sec())
+        self.diff += abs(cur_gps.stamp-img_msg.header.stamp.to_sec())
         # print(cur_gps.header.stamp.to_sec()-img_msg.header.stamp.to_sec())
-        timestamp = cur_gps.header.stamp
-        date = datetime.datetime.utcfromtimestamp(timestamp.to_sec())
+        timestamp = cur_gps.stamp
         gps_out = np.array([
-            cur_gps.latitude, 
-            cur_gps.longitude,
+            cur_gps.lat, 
+            cur_gps.lon,
             cur_gps.height,
             cur_gps.roll,
             cur_gps.pitch,
-            cur_gps.azimuth,
-            timestamp.to_sec(),
-            cur_gps.north_velocity,
-            cur_gps.east_velocity
+            float(origin.compass_heading_deg(cur_gps.heading)), # azimuth, compass deg
+            timestamp,
+            cur_gps.vn,
+            cur_gps.ve
         ])
         if self.gps_last[0] - gps_out[0] == 0 and self.gps_last[1]-gps_out[1] == 0:
             print(f"Same coord at {iter}")

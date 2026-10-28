@@ -1,36 +1,71 @@
+# Consolidated Python dependencies for the whole repo (hil nodes, HIL_realtime_rendering,
+# HIL_modular_autonomy, PIDNet/SparseInst). Replaces the old Docker-era requirements and the
+# per-package requirements in src/hil/src/HIL_modular_autonomy and src/hil/src/HIL_realtime_rendering.
+#
+# Target: Python 3.12 (Ubuntu 24.04 / ROS 2 Jazzy) in a virtualenv, e.g.
+#   python3 -m venv --system-site-packages ~/venvs/hil && source ~/venvs/hil/bin/activate
+#   (--system-site-packages so the venv can see ROS packages: rclpy, cv_bridge, message_filters, ...)
+#   pip install -r requirements.txt
+#
+# NOT installable with pip (come from ROS / system):
+#   rospy, rclpy, cv_bridge, message_filters, tf, rospkg, ros_numpy, sensor_msgs, geometry_msgs,
+#   septentrio_gnss_driver, pacmod2_msgs  (ROS packages)
+#   Blender's `bpy` is only needed to author new assets (models/blender), not to run anything here.
+#
+# Install separately, in this order, BEFORE the rest if you need a specific CUDA build:
+#   1. torch + torchvision matching the car's CUDA (https://pytorch.org/get-started/locally/).
+#      The dev machine uses torch 2.4.1+cu121 / torchvision 0.19.1+cu121.
+#   2. detectron2 (needed by SparseInst / HIL_modular_autonomy/agent.py):
+#        pip install --no-build-isolation 'git+https://github.com/facebookresearch/detectron2.git'
+#      (this also brings fvcore and pycocotools)
+
+# ---- core ----
 numpy
-opencv-python
-matplotlib
-pillow==9.3.0
-# Insertion Requirements
-objloader
-pyrr
-moderngl==5.7.2
-moderngl-window==2.4.2
-pygame==2.1.2
-omegaconf==2.3.0
-pyglm
-trimesh
-# install torch and torchvision separaetely
-# IL
-pytorch-lightning
-# Modular Autonomy Requirements
-EasyDict==1.7
-shapely
-Cython
 scipy
 pandas
+matplotlib
+tqdm
 pyyaml
+pillow>=9.5          # insertion_node uses PIL.Image.Resampling (>= 9.1)
+opencv-python
+pymap3d              # lat/lon -> local ENU frame (hil/origin.py), same lib as gem_gnss_control
+torch
+torchvision
+
+# ---- ROS bag conversion (ROS 2 bag -> ROS 1 bag, pure python, no ROS needed) ----
+rosbags
+
+# ---- HIL_realtime_rendering (virtual object insertion) ----
+moderngl==5.7.2
+moderngl-window==2.4.2
+pyglet>=2.0,<3
+pygame==2.5.0
+omegaconf==2.0.0
+PyGLM
+pvlib                # sun direction from the origin lat/lon (light.py)
+trimesh
+PyWavefront
+lpips                # metric.py (evaluation only)
+
+# ---- HIL_modular_autonomy (agent + PIDNet + SparseInst) ----
+easydict
+shapely
+Cython
 json_tricks
 scikit-image
 yacs>=0.1.5
 tensorboardX>=1.6
-tqdm
+timm
 ninja
 open3d
 pyransac3d
-matplotlib
-PyQt5
-timm
-# GPS code Requirements
-utm
+PyQt5                # matplotlib GUI backend
+
+# ---- imitation learning stack (HIL_imitation_learning, not in this repo) ----
+pytorch-lightning
+
+# ---- legacy standalone insertion engine (insertionEngine*.py, insertion_colmap.py) ----
+objloader
+pyrr
+imageio
+vedo

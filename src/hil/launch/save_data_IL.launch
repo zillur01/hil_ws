@@ -1,4 +1,6 @@
 <launch>
+  <!-- TODO(USER): check the /zed2/... remaps below match your ZED topic names (e.g. /zed/zed_node/...).
+       GNSS + speed topics (/navsatfix, /insnavgeod, /pacmod/vehicle_speed_rpt) are fixed in hil/globals.py. -->
   <arg name="input_bag_path" default="/media/bhargav/03E7-EC27/cone_bags/cone2_2022-12-12-16-30-37.bag"/>
   <param name="/use_sim_time" value="true"/>
   <node
@@ -18,7 +20,6 @@
     <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
     <remap from="/cloud" to="/lidar1/velodyne_points"/>
     <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
-    <remap from="/gps" to="/novatel/inspva"/>
     <param name="input_bag_path" value="$(arg input_bag_path)" /> 
    </node>
 

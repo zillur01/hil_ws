@@ -6,7 +6,10 @@ RGB_TOPIC = "/rgb"
 DEPTH_IM_TOPIC = "/depth"
 LIDAR_PC_TOPIC = "/cloud"
 CAMERA_INFO_TOPIC = "/camera_info"
-GPS_TOPIC = "/gps"
+# GNSS / vehicle speed (Septentrio + PACMod). Absolute names, no remap needed.
+NAVSATFIX_TOPIC = "/navsatfix"
+INSNAVGEOD_TOPIC = "/insnavgeod"
+PACMOD_SPEED_TOPIC = "/pacmod/vehicle_speed_rpt"
 VIS_MARKER_TOPIC = "/gps_vis_marker"
 OUTPUT_MAP_TOPIC = "/projected"
 

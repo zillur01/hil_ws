@@ -4,8 +4,8 @@ import rospy
 import message_filters
 from std_msgs.msg import Float64
 from sensor_msgs.msg import PointCloud2, Image
-from novatel_gps_msgs.msg import Inspva
-from pacmod_msgs.msg import PacmodCmd, VehicleSpeedRpt
+from pacmod_msgs.msg import PacmodCmd # TODO(USER): IL-only, ROS1 pacmod type; port to pacmod2_msgs with the ROS2 move
+from hil.gnss import GnssState, VehicleSpeedRpt
 from cv_bridge import CvBridge
 from hil.utils import *
 from hil.tf_funcs import get_gps_tf
@@ -40,7 +40,8 @@ class ilAgentNode:
         
         # Synced topics
         self.image_sub= rospy.Subscriber(RGB_TOPIC,Image, callback=self.im_gps_cb)
-        self.inspva_sub = rospy.Subscriber(GPS_TOPIC, Inspva, callback=self.gps_cb)
+        self.gnss = GnssState()
+        self.gps_timer = rospy.Timer(rospy.Duration(0.05), self.gps_cb)
 
         self.bridge = CvBridge()
 
@@ -78,11 +79,14 @@ class ilAgentNode:
     #     )
     # def speed_cb(self, speed_msg: VehicleSpeedRpt):
         # pass
-    def gps_cb(self, gps_msg:Inspva):
+    def gps_cb(self, event=None):
+        gps_msg = self.gnss.snapshot()
+        if gps_msg is None:
+            return
         if not self.is_running_prediction and self.start_time:
-            gps_stamp = np.float32(gps_msg.header.stamp.to_sec() - self.start_time)
+            gps_stamp = np.float32(gps_msg.stamp - self.start_time)
             if len(self.agent.R_timestamp_cache)==0 or gps_stamp > self.agent.R_timestamp_cache[-1]:
-                tot_speed = float(np.sqrt(np.square(gps_msg.east_velocity) + np.square(gps_msg.north_velocity)))
+                tot_speed = float(gps_msg.speed) # PACMod vehicle speed
                 self.cur_speed = tot_speed
                 (t,Q) = get_gps_tf(gps_msg)
                 pose = tf_to_transform(t, Q)

@@ -29,7 +29,8 @@
   <!-- Examples: -->
   <!-- Use depend as a shortcut for packages that are both build and exec dependencies -->
   <depend>pacmod_msgs</depend>
-  <depend>novatel_gps_msgs</depend>
+  <depend>septentrio_gnss_driver</depend>
+  <depend>pacmod2_msgs</depend>
   <depend>ros_numpy</depend>
   <depend>rosbag</depend>
   <!--   Note that this is equivalent to the following: -->

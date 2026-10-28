@@ -2,12 +2,13 @@
 import rospy
 from std_msgs.msg import Float64
 from sensor_msgs.msg import PointCloud2, Image
-from pacmod_msgs.msg import VehicleSpeedRpt
 from cv_bridge import CvBridge
 import cv2
 from PIL import Image as pil_img
 import pandas as pd
 import hil.utils as ut
+from hil.gnss import GnssState, VehicleSpeedRpt
+from hil.origin import compass_heading_deg, load_local_waypoints
 from hil.tf_funcs import *
 from hil.globals import *
 import tf, message_filters
@@ -36,19 +37,9 @@ class modularAgentNode:
     def __init__(self, waypoint_path):
         rospy.init_node('modular_agent', anonymous=True)
         
-        # Setup waypoint trajectory info 
-        df_gps = pd.read_csv(waypoint_path)
-        gps_timestamp = df_gps["field.header.stamp"].tolist()
-        gps_timestamp = np.array(gps_timestamp)
-        gps_timestamp, ind = np.unique(gps_timestamp, return_index=True)
-        lat = np.array(df_gps["field.latitude"].tolist())[ind]
-        lon = np.array(df_gps["field.longitude"].tolist())[ind]
-        azimuth = np.array(df_gps["field.azimuth"].tolist())[ind]
-        
-        # Planned xza waypoint trajectory
-        self.xzas = np.zeros((len(ind), 3))
-        for i in range(len(ind)):
-            self.xzas[i] = lla_to_xza(lat[i], lon[i], azimuth[i])
+        # Planned xza waypoint trajectory, recorded in the local ENU frame (x, y, heading_deg,
+        # header-less CSV, see hil/origin.py). Same format as gem_gnss_control's waypoints.
+        self.xzas = load_local_waypoints(waypoint_path)
         # Closest point in trajectory to our current position
         self.cur_xza_ind = 0
 
@@ -68,10 +59,11 @@ class modularAgentNode:
         # self.image_sub = rospy.Subscriber(RGB_TOPIC, Image, callback=self.im_callback)
         self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
         self.depth_sub = message_filters.Subscriber(DEPTH_IM_TOPIC, Image)
-        self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
+        # Pose + speed come from the latest /navsatfix, /insnavgeod, /pacmod/vehicle_speed_rpt
+        self.gnss = GnssState()
 
         self.im_depth_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.image_sub, self.depth_sub, self.inspva_sub], 
+            [self.image_sub, self.depth_sub], 
             k_time_sync_queue_size, 
             k_time_sync_slop
             )
@@ -83,8 +75,8 @@ class modularAgentNode:
         self.n_prediction = 0 # number of times update_pred_step is called
         self.n_callback = 0 # numer of times im_depth_callback is called
 
-    def im_depth_callback(self, img_msg: Image, depth_msg: Image, gps_msg: Inspva):
-        """Sensor data(rgb, depth, pose) updated as synced messages are received"""
+    def im_depth_callback(self, img_msg: Image, depth_msg: Image):
+        """Sensor data(rgb, depth) updated as synced messages are received"""
         # print("received data")
         self.cur_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='rgb8')
         self.cur_image_timestamp_s = img_msg.header.stamp.to_sec()
@@ -95,13 +87,20 @@ class modularAgentNode:
         # plt.imshow(orig_depth_map)
         # plt.show()
         self.cur_depth_map = np.nan_to_num(orig_depth_map, nan=np.inf, posinf=np.inf, neginf=np.inf)
-        self.cur_spd = float(np.sqrt(np.square(gps_msg.east_velocity) + np.square(gps_msg.north_velocity)))
-        self.cur_xza_pose = lla_to_xza(gps_msg.latitude, gps_msg.longitude, gps_msg.azimuth)
+        self.n_callback += 1
+
+    def update_gnss(self):
+        """Refresh ego pose (local ENU) and speed (PACMod) from the latest GNSS values.
+        Returns False if GNSS/speed data is missing or stale."""
+        s = self.gnss.snapshot()
+        if s is None:
+            return False
+        self.cur_spd = float(s.speed)
+        self.cur_xza_pose = lla_to_xza(s.lat, s.lon, float(compass_heading_deg(s.heading)))
         while   self.cur_xza_ind < len(self.xzas)-1 and \
                 dist2d(self.cur_xza_pose[:2], self.xzas[self.cur_xza_ind]) > dist2d(self.cur_xza_pose[:2], self.xzas[self.cur_xza_ind+1]):
                 self.cur_xza_ind += 1
-        # print(self.cur_xza_ind)
-        self.n_callback += 1
+        return True
 
     def update_pred_step(self):
         xza_ind = self.cur_xza_ind
@@ -141,8 +140,7 @@ class modularAgentNode:
                 self.start_time = time.perf_counter()
             if  self.cur_image is not None and \
                 self.cur_depth_map is not None and \
-                self.cur_xza_pose is not None and \
-                self.cur_spd is not None:
+                self.update_gnss():
                 print("predicting")
                 self.update_pred_step()
             r.sleep()

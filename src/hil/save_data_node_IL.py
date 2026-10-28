@@ -3,12 +3,12 @@ import numpy as np
 import rospy
 import message_filters
 from sensor_msgs.msg import PointCloud2, Image
-from novatel_gps_msgs.msg import Inspva
 import ros_numpy
 from cv_bridge import CvBridge
 import cv2
 from hil.utils import *
 from hil.globals import *
+from hil.gnss import GnssState
 import rospkg
 import os, sys, time
 import csv  
@@ -37,10 +37,10 @@ class saveDataNode:
         self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
         self.image_sub= message_filters.Subscriber(RGB_TOPIC,Image)
         self.depth_sub= message_filters.Subscriber(DEPTH_IM_TOPIC,Image)
-        self.inspva_sub = message_filters.Subscriber(GPS_TOPIC, Inspva)
+        self.gnss = GnssState()
 
         self.pc_im_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.image_sub, self.depth_sub, self.inspva_sub], 
+            [self.image_sub, self.depth_sub], 
             k_time_sync_queue_size, 
             k_time_sync_slop
             )
@@ -48,6 +48,8 @@ class saveDataNode:
         self.iter = 0
 
         # Pacmod Topics
+        # TODO(USER): IL-only. These are the old ROS1 PACMod topic names/types; the ROS2 car
+        # (pacmod2_msgs) uses different ones (e.g. /pacmod/accel_cmd, /pacmod/vehicle_speed_rpt).
         self.pacmod_accel_seq_sub = rospy.Subscriber("/pacmod/as_rx/accel_cmd", PacmodCmd, callback=self.accel_seq_cb)
         self.cur_accel_seq = None
         self.pacmod_brake_seq_sub = rospy.Subscriber("/pacmod/as_rx/brake_cmd", PacmodCmd, callback=self.brake_seq_cb)
@@ -71,10 +73,13 @@ class saveDataNode:
     def speed_cb(self, speed_msg: VehicleSpeedRpt):
         self.cur_speed_seq = speed_msg.header.seq
 
-    def pc_im_callback(self,img_msg: Image, depth_msg: Image, gps_msg:Inspva):
+    def pc_im_callback(self,img_msg: Image, depth_msg: Image):
+        gps_msg = self.gnss.snapshot()
+        if gps_msg is None:
+            return
         if self.cur_brake_seq != None and self.cur_accel_seq != None:
             img_t = img_msg.header.stamp.to_nsec()
-            gps_t = gps_msg.header.stamp.to_nsec()
+            gps_t = int(gps_msg.stamp * 1e9)
             depth_t = depth_msg.header.stamp.to_nsec()
             synced_row = [
                 img_t,

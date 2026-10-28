@@ -4,11 +4,11 @@ import numpy as np
 import rospy
 from hil import rviz_tools, tf_funcs, utils
 from hil.globals import *
-from novatel_gps_msgs.msg import Inspva
+from hil.gnss import GnssState
 from geometry_msgs.msg import TransformStamped, Transform
 
 class gps_to_tf_node:
-    """ Converts a raw Inspva gps message to a ros transform 
+    """ Converts the latest GNSS/INS state (NavSatFix + INSNavGeod) to a ros transform 
         Publishes tansform message on /tf and visualization marker on VIS_MARKER_TOPIC """
     def __init__(self):
         rospy.init_node('gps_to_tf', anonymous=True)
@@ -18,16 +18,15 @@ class gps_to_tf_node:
         # self.pub_static_transform(T_lidar_rgb, LIDAR_FRAME, CAMERA_FRAME)
 
         self.markers = rviz_tools.RvizMarkers(WORLD_FRAME, VIS_MARKER_TOPIC)
-        self.first_msg = False
-        self.start_gps = None
-        self.inspva_sub = rospy.Subscriber(GPS_TOPIC, Inspva, callback=self.process_gps_callback)
+        self.gnss = GnssState()
+        self.gps_timer = rospy.Timer(rospy.Duration(0.05), self.process_gps_callback)
         self.tf_listener = tf.TransformListener()
         self.last_pub_time = rospy.Time.now()
 
-    def process_gps_callback(self, cur_gps: Inspva):                
-        if not self.first_msg:
-            self.start_gps = cur_gps
-            self.first_msg = True
+    def process_gps_callback(self, event=None):
+        cur_gps = self.gnss.snapshot()
+        if cur_gps is None:
+            return
         if self.last_pub_time < rospy.Time.now():
             (t,Q) = tf_funcs.get_gps_tf(cur_gps)
             self.br.sendTransform(

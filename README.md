@@ -22,6 +22,20 @@
 2. `pip install -r requirements.txt`
 3. You may need to change the absolute paths/ros-based paths on lines 196-199 in insertionEngine.py to reflect the correct extracted data and model/texture paths
 4. `cd src/hil/src/hil && python insertionEngine.py`
+## Septentrio / PACMod inputs and the local frame
+The nodes no longer use the Novatel `Inspva` topic. Inputs (names fixed in `src/hil/src/hil/globals.py`):
+- `/navsatfix` (`sensor_msgs/NavSatFix`): lat/lon
+- `/insnavgeod` (`septentrio_gnss_driver/INSNavGeod`): heading, pitch, roll, height
+- `/pacmod/vehicle_speed_rpt` (`VehicleSpeedRpt`): ego speed in m/s
+
+All poses, waypoints and virtual objects live in one local East-North-Up frame (metres) centred on the
+origin in `src/hil/src/hil/origin.py` (same as `gem_gnss_control` `e2_pp.yaml`). Waypoints are header-less
+CSV rows `x, y, heading_deg` in that frame, so files recorded by `gem_gnss_control/record_waypoints.py`
+(or `save_waypoint_node.py` here) work directly as `waypoint_csv_path`. Search for `TODO(USER)` for the
+values you still need to check (heading convention, roll/pitch signs, origin height, ZED topic names).
+
+Python dependencies for everything: `pip install -r requirements.txt` (see the header for torch/detectron2).
+
 ## Data Setup
 - A box folder with recorded data and model files mirrors the structure of the `src/HIL_Research/hil/data/` folder
 - Download desired data from the `data/` folder in [box storage](https://uofi.box.com/s/ivdfygn9meyj8cjahn5d5j6hd570sjz8) into the respective subfolder
