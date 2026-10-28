@@ -146,3 +146,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Large model weights
+*.pth
+*.pt
+*.ckpt
+src/hil/src/HIL_realtime_rendering/assets/*
+src/hil/src/HIL_realtime_rendering/kitti360/*

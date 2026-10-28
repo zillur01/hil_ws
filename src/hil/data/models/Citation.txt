@@ -1,2 +1,0 @@
-Cube and diamond models from: https://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
-https://graphics.stanford.edu/~mdfisher/Data/Meshes/bunny.obj
