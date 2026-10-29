@@ -1,0 +1,69 @@
+# A cone, a pedestrian next to the road and a parked car along the y = -13 route.
+# Renderer frame: x = -East, y = Up, z = North (metres), origin = hil/origin.py ORIGIN_LAT/LON.
+# An object at local position (E east, N north) uses `pos: [-E, 0.0, N]` in object2scenario.
+# The ground plane is 1.8 m below the camera height at the origin (world.scenario2world, y = -1.8).
+mode: production
+target_frame_rate: 100
+shadow_constant: 1
+device: cuda
+display: pygame2
+use_depth_occlusion: False
+window_size: [640, 360]
+
+
+light_config:
+  direction: [0.0, 1.0, -0.2] # it will be normalized during postprocessing
+  color: [0.6, 0.8, 1.0] # rgb
+  intensity_config:
+    light: 0.0
+    ambient: 1.0
+    shadow: 0.02
+  shadow_poisson_sampling_denominator: 700.0
+  gamma_correction: 1.0
+
+camera_config:
+  # vertical field of view in degrees = 2*atan(H / (2*fy)). ZED2 HD720 (fy ~ 527.6) -> ~68.6;
+  # 72 is the value used by the original experiments.
+  # TODO(USER): set from your camera_info (K[4] = fy, height = 720)
+  fov: 72.0
+  near: 0.1
+  far: 100.0
+
+scenario_configs:
+  world:
+    scenario2world:
+      pos:   [0.0, -1.8, 0.0]
+      rot:   [0.0, 0.0, 0.0]
+      scale: [1.0, 1.0, 1.0]
+
+  intersection:
+    is_activated: False
+
+  jaywalking:
+    is_activated: False
+
+  static_objects:
+    is_activated: True
+    scenario2world:
+      pos:   [0.0, -1.8, 0.0]
+      rot:   [0.0, 0.0, 0.0]
+      scale: [1.0, 1.0, 1.0]
+    object_configs:
+      object_0:   # cone at ENU east=20, north=-13
+        object_type: cone
+        object2scenario:
+          pos:   [-20.0, 0.0, -13.0]
+          rot:   [0.0, 0.0, 0.0]    # yaw about the vertical axis (degrees)
+          scale: [1.0, 1.0, 1.0]
+      object_1:   # yuan at ENU east=35, north=-11
+        object_type: yuan
+        object2scenario:
+          pos:   [-35.0, 0.0, -11.0]
+          rot:   [0.0, 0.0, 0.0]    # yaw about the vertical axis (degrees)
+          scale: [1.0, 1.0, 1.0]
+      object_2:   # benz at ENU east=50, north=-17
+        object_type: benz
+        object2scenario:
+          pos:   [-50.0, 0.0, -17.0]
+          rot:   [0.0, 90.0, 0.0]    # yaw about the vertical axis (degrees)
+          scale: [1.0, 1.0, 1.0]

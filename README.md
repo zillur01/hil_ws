@@ -1,7 +1,8 @@
 # HIL_Research
-> **Status (branch `dev`):** being ported from ROS 1 Noetic/Docker to **ROS 2 Humble**. Only the modular-autonomy
-> path is ported so far (see "ROS 2 quickstart"). The Docker/catkin instructions further down are obsolete, and the
-> other nodes in `src/hil/` (insertion, metrics, save_data, IL, mapping, lidar calibration) are still ROS 1 only.
+> **Status (branch `dev`):** being ported from ROS 1 Noetic/Docker to **ROS 2 Humble**. Ported so far: the modular
+> agent and the virtual-object insertion (see "ROS 2 quickstart" and "First test"). The Docker/catkin instructions
+> further down are obsolete, and the other nodes in `src/hil/` (metrics, save_data, IL, mapping, lidar calibration)
+> are still ROS 1 only.
 ## Dependencies
 - `docker`, `docker-compose`
 - `make` (kinda optional, but used for convienence of building/running docker containers)
@@ -41,6 +42,70 @@ ros2 launch hil modular_agent.launch.py waypoint_csv_path:=/abs/path/my_track.cs
 - With a bag, use `ros2 bag play --clock` and `use_sim_time:=true`.
 - **Recording waypoints:** use `gem_gnss_control`'s `record_waypoints` with the same origin as this repo
   (it defaults to a different one!): `ros2 run gem_gnss_control record_waypoints --ros-args -p origin_lat:=40.092857 -p origin_lon:=-88.235992`.
+
+## First test: are the objects rendered where I want them?
+The insertion node renders virtual objects into the camera image at the car's pose from `/navsatfix` +
+`/insnavgeod` and publishes `/insertion/rendered_image`. Object positions come from a YAML config; ready-made
+ones are in `src/hil/src/HIL_realtime_rendering/configs/gem/` (positions are in the local frame, see below):
+
+| config | what it shows |
+|---|---|
+| `static_cone_30m.yaml` | one cone 30 m east of the origin, on the `my_track.csv` route (y = -13) |
+| `static_multi.yaml` | a cone (20 m), a pedestrian beside the road (35 m) and a parked car (50 m) along the route |
+| `compass_ring.yaml` | cone east, car north, chair west, person south, each 10 m from the origin (orientation check) |
+| `jaywalker.yaml` | a pedestrian crosses the route 40 m east of the origin, triggered within 15 m |
+
+**1. Run it.** Build as in the quickstart, then either with the car (ZED, Septentrio running; start the node with
+the car at the point where it should be "ground level"):
+```bash
+ros2 launch hil insertion.launch.py config_path:=gem/static_multi.yaml auto_origin_alt:=true \
+    rgb_topic:=/zed/zed_node/left/image_rect_color depth_topic:=/zed/zed_node/depth/depth_registered
+```
+or at a desk with fake sensors, which publish a camera image (grey ground, blue sky), `/navsatfix`, `/insnavgeod`
+and a PACMod speed for a car standing at local (x, y) facing `heading_deg` (compass degrees, 0 = north, 90 = east),
+or driving along a waypoint file:
+```bash
+ros2 run hil fake_sensor_node.py --ros-args -p x:=-3.7 -p y:=-13.5 -p heading_deg:=90          # terminal 1
+ros2 launch hil insertion.launch.py config_path:=gem/static_multi.yaml auto_origin_alt:=true   # terminal 2
+ros2 run hil fake_sensor_node.py --ros-args -p waypoint_csv_path:=/abs/my_track.csv -p speed:=2.0   # or: drive it
+```
+Look at the result with `ros2 run rqt_image_view rqt_image_view /insertion/rendered_image` (or add
+`show_debug:=true` to get OpenCV windows). `config_path` is absolute, or relative to the renderer's `configs/` folder.
+To try several configs, stop the node and start it again with another `config_path` (it is read at start-up).
+
+**2. Check the placement.** The node logs every 2 s the car's position and the objects' positions in the same local
+frame, e.g. `camera ENU (-3.70, -13.50, 0.00)` and `obstacles (ENU east, north, up): (20.0, -13.0, -1.8); ...`;
+the same objects are published on `/insertion/obstacle_poses`. For a car at (-3.7, -13.5) facing east, the cone
+(20, -13) must appear almost straight ahead and the car (50, -17) to the right. With `compass_ring.yaml`, standing
+at the origin and turning to 90 / 0 / 270 / 180 degrees must show cone / car / chair / person.
+
+**3. Define your own objects.** Copy a config from `configs/gem/` and edit `object_configs` (or `actor_configs`):
+- **Position:** the renderer's world frame is x = -East, y = Up, z = North. An object at local position
+  (E, N) therefore needs `pos: [-E, 0.0, N]` in `object2scenario` (with `scenario2world.pos: [0.0, -1.8, 0.0]`).
+  Mind the sign of E: `pos: [10, 0, 0]` is 10 m **west** of the origin.
+- **Heading:** `rot: [0.0, yaw, 0.0]`, degrees about the vertical axis. Walking actors move along their own
+  heading: yaw 0 = north, 180 = south, 90 = west, 270 = east.
+- **Types** (`object_type`): `cone` (traffic cone, `scale: 1.0` is about 0.75 m; `sim_cone` is a scanned cone, 0.9 m at scale 1), `benz`, `suv`, `bus`, `baby`, `building`, `yuan`,
+  `albert`, `zhi-hao`, `chair_0`, `chair_1`, `ladder`, `traffic_light` and the scanned `real_*` objects;
+  walking/running people (`animation_type`) are `man_walking`, `woman_walking`, `man_running`, `lady_walking`, ... at
+  `scale: 1.0` (about 1.8 m tall).
+- Other scenarios (`intersection`, `jaywalking`) are described by the example configs in `configs/exp_*`.
+
+**4. Things that move the objects away from where you expect:**
+- **Height.** The ground plane is 1.8 m below the camera height at the origin. `auto_origin_alt:=true` takes the
+  first GNSS height as local z = 0; otherwise set `ORIGIN_ALT` in `hil/origin.py`. If the antenna is not about
+  1.8 m above the ground, change every `-1.8` in the config (`world.scenario2world`, `static_objects.scenario2world`)
+  to minus your antenna height, or the objects float or sink.
+- **Camera model.** `camera_config.fov` is the *vertical* field of view in degrees; for your ZED use
+  `2*atan(720 / (2*fy))` from `camera_info` (about 68.6 for a ZED2 at HD720; the configs use 72).
+- **Heading / roll / pitch.** The `TODO(USER)` items: confirm `/insnavgeod` heading is a compass heading (the
+  compass test above does that), and the roll/pitch signs.
+- **GNSS pose = camera pose.** There is no camera mount offset, as in the original code.
+- **Output size.** The image is rendered and published at the config's `window_size` (640x360), not at camera
+  resolution, and the depth is the virtual objects only (100 m elsewhere). The modular agent assumes 1280x720
+  ZED images: for closed-loop runs set `window_size: [1280, 720]` (slower) or adapt the agent's intrinsics.
+- **Pedestrian speed** depends on the rendered frame rate (one step per rendered frame).
+- `/insertion/obstacle_poses` is now in the local ENU frame (the ROS 1 node published renderer coordinates).
 
 ## Septentrio / PACMod inputs and the local frame
 The nodes no longer use the Novatel `Inspva` topic. Inputs (names fixed in `src/hil/src/hil/globals.py`):

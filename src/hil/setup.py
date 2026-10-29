@@ -17,7 +17,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         # node scripts, runnable with `ros2 run hil <name>.py`
-        (os.path.join('lib', package_name), ['modular_agent_node.py']),
+        (os.path.join('lib', package_name),
+            ['modular_agent_node.py', 'insertion_node.py', 'fake_sensor_node.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

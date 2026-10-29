@@ -64,15 +64,20 @@ class GnssState:
             self._speed = msg.vehicle_speed
             self._last_rx['speed'] = self._now_s()
 
-    def snapshot(self, max_age_s=1.0):
-        """Latest values as a GnssSample, or None until all three topics have been
-        received (or if any has gone stale for more than max_age_s)."""
+    def snapshot(self, max_age_s=1.0, need_speed=True):
+        """Latest values as a GnssSample, or None until the required topics have been
+        received (or if any has gone stale for more than max_age_s).
+
+        need_speed=False: pose-only consumers (e.g. the insertion node) don't wait for
+        /pacmod/vehicle_speed_rpt; `speed` is then 0.0 if it was never received."""
         with self._lock:
-            if self._fix is None or self._ins is None or self._speed is None:
+            required = ['fix', 'ins'] + (['speed'] if need_speed else [])
+            if any(self._last_rx[k] is None for k in required):
                 return None
             now = self._now_s()
-            if max_age_s is not None and any(now - t > max_age_s for t in self._last_rx.values()):
+            if max_age_s is not None and any(now - self._last_rx[k] > max_age_s for k in required):
                 return None
             lat, lon, stamp = self._fix
             height, heading, pitch, roll, ve, vn = self._ins
-            return GnssSample(lat, lon, height, heading, pitch, roll, ve, vn, self._speed, stamp)
+            speed = self._speed if self._speed is not None else 0.0
+            return GnssSample(lat, lon, height, heading, pitch, roll, ve, vn, speed, stamp)
