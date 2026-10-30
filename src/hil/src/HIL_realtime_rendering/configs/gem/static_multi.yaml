@@ -1,5 +1,5 @@
 # A cone, a pedestrian next to the road and a parked car along the y = -13 route.
-# Renderer frame: x = -East, y = Up, z = North (metres), origin = hil/origin.py ORIGIN_LAT/LON.
+# Renderer frame: x = -East, y = Up, z = North (metres), origin = hil_common/origin.py ORIGIN_LAT/LON.
 # An object at local position (E east, N north) uses `pos: [-E, 0.0, N]` in object2scenario.
 # The ground plane is 1.8 m below the camera height at the origin (world.scenario2world, y = -1.8).
 mode: production

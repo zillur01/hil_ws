@@ -6,11 +6,11 @@ from sensor_msgs.msg import PointCloud2, Image
 import ros_numpy
 from cv_bridge import CvBridge
 import cv2
-from hil.utils import *
-from hil.tf_funcs import *
-from hil.globals import *
-from hil.gnss import GnssState
-from hil import origin
+from hil_common.utils import *
+from hil_common.tf_funcs import *
+from hil_common.globals import *
+from hil_common.gnss import GnssState
+from hil_common import origin
 import rospkg
 import os
 import datetime 

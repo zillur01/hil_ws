@@ -1,8 +1,8 @@
 <launch>
   <!-- TODO(USER): check the /zed2/... remaps below match your ZED topic names (e.g. /zed/zed_node/...).
-       GNSS + speed topics (/navsatfix, /insnavgeod, /pacmod/vehicle_speed_rpt) are fixed in hil/globals.py. -->
+       GNSS + speed topics (/navsatfix, /insnavgeod, /pacmod/vehicle_speed_rpt) are fixed in hil_common/globals.py. -->
   <arg name="use_bag" default="0"/>
-  <!-- TODO(USER): waypoints recorded in the local frame (x,y,heading_deg), see hil/origin.py / save_waypoints.launch -->
+  <!-- TODO(USER): waypoints recorded in the local frame (x,y,heading_deg), see hil_common/origin.py / save_waypoints.launch -->
   <arg name="waypoint_csv_path" default="$(find hil)/data/waypoints/my_track.csv"/>
   <arg name="experiment_name" default="test"/>
 

@@ -12,7 +12,7 @@ from detectron2.data.detection_utils import read_image
 
 
 # Local ENU frame shared with the whole repo (origin = gem_gnss_control e2_pp.yaml origin).
-from hil.origin import latlon_to_local
+from hil_common.origin import latlon_to_local
 
 
 def lla_to_xza(lat, lon, ang):

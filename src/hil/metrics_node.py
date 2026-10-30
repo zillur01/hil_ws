@@ -2,11 +2,11 @@
 import tf, tf2_ros
 import numpy as np
 import rospy
-from hil import rviz_tools, tf_funcs, utils
-from hil.globals import *
+from hil_common import rviz_tools, tf_funcs, utils
+from hil_common.globals import *
 from std_msgs.msg import Float64
-from hil.gnss import GnssState
-from hil.origin import load_local_waypoints
+from hil_common.gnss import GnssState
+from hil_common.origin import load_local_waypoints
 from geometry_msgs.msg import PoseArray, Pose
 import message_filters 
 from pacmod_msgs.msg import PacmodCmd

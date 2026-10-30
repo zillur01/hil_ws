@@ -7,11 +7,11 @@ package_name = 'hil'
 setup(
     name=package_name,
     version='0.0.0',
-    # Only the `hil` library package is installed. The renderer (HIL_realtime_rendering) and the
+    # Only the `hil_common` library package is installed. The renderer (HIL_realtime_rendering) and the
     # agent (HIL_modular_autonomy) are run from the source tree, so build with
     # `colcon build --symlink-install`.
     package_dir={'': 'src'},
-    packages=['hil'],
+    packages=['hil_common'],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),

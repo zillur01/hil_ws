@@ -5,11 +5,11 @@ import message_filters
 from std_msgs.msg import Float64
 from sensor_msgs.msg import PointCloud2, Image
 from pacmod_msgs.msg import PacmodCmd # TODO(USER): IL-only, ROS1 pacmod type; port to pacmod2_msgs with the ROS2 move
-from hil.gnss import GnssState, VehicleSpeedRpt
+from hil_common.gnss import GnssState, VehicleSpeedRpt
 from cv_bridge import CvBridge
-from hil.utils import *
-from hil.tf_funcs import get_gps_tf
-from hil.globals import *
+from hil_common.utils import *
+from hil_common.tf_funcs import get_gps_tf
+from hil_common.globals import *
 from PIL import Image as pil_img
 
 import rospkg, os, sys, time

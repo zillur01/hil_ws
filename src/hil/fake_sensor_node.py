@@ -4,7 +4,7 @@ insertion node (or the modular agent) can be tried without the car.
 
 The "car" either stands still at (x, y) facing `heading_deg` (compass degrees, 0 = north, 90 = east),
 or, if `waypoint_csv_path` is given, drives along that path at `speed` m/s.
-Positions are in the local ENU frame (metres east / north of the origin in hil/origin.py).
+Positions are in the local ENU frame (metres east / north of the origin in hil_common/origin.py).
 
   ros2 run hil fake_sensor_node.py --ros-args -p x:=0.0 -p y:=-13.0 -p heading_deg:=90.0
 """
@@ -20,8 +20,8 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image, NavSatFix
 from septentrio_gnss_driver.msg import INSNavGeod
 
-from hil import origin
-from hil.ros_image import rgb_to_imgmsg, depth_to_imgmsg
+from hil_common import origin
+from hil_common.ros_image import rgb_to_imgmsg, depth_to_imgmsg
 
 
 def make_background(width, height):

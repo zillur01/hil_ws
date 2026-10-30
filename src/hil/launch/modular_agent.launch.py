@@ -9,7 +9,7 @@ def generate_launch_description():
     # TODO(USER): set the defaults below to your ZED topic names (ros2 topic list | grep zed)
     args = [
         # waypoints recorded in the local frame (x, y, heading_deg), e.g. gem_gnss_control's my_track.csv
-        # (recorded with the same origin as hil/origin.py), see README
+        # (recorded with the same origin as hil_common/origin.py), see README
         DeclareLaunchArgument('waypoint_csv_path', default_value='data/waypoints/my_track.csv'),
         DeclareLaunchArgument('rgb_topic', default_value='/zed/zed_node/left/image_rect_color'),
         DeclareLaunchArgument('depth_topic', default_value='/zed/zed_node/depth/depth_registered'),

@@ -3,6 +3,11 @@
 > agent and the virtual-object insertion (see "ROS 2 quickstart" and "First test"). The Docker/catkin instructions
 > further down are obsolete, and the other nodes in `src/hil/` (metrics, save_data, IL, mapping, lidar calibration)
 > are still ROS 1 only.
+>
+> **Layout:** `src/hil/` is the ROS 2 package (`package.xml`, `setup.py`, nodes, launch files).
+> `src/hil/src/hil_common/` is the Python library the nodes import (`from hil_common import origin`; it was
+> called `hil` before, which was confusing). If you built an older checkout, delete `build/hil install/hil`
+> before running `colcon build` again.
 ## Dependencies
 - `docker`, `docker-compose`
 - `make` (kinda optional, but used for convienence of building/running docker containers)
@@ -25,7 +30,7 @@
   - You will need to populate at least the `extracted_bags/outdoor1/` and `models/` folders from box to run the insertion code
 2. `pip install -r requirements.txt`
 3. You may need to change the absolute paths/ros-based paths on lines 196-199 in insertionEngine.py to reflect the correct extracted data and model/texture paths
-4. `cd src/hil/src/hil && python insertionEngine.py`
+4. `cd src/hil/src/hil_common && python insertionEngine.py`
 ## ROS 2 quickstart (modular agent)
 ```bash
 python3.10 -m venv --system-site-packages ~/venvs/hil && source ~/venvs/hil/bin/activate   # see requirements.txt header
@@ -79,6 +84,43 @@ the same objects are published on `/insertion/obstacle_poses`. For a car at (-3.
 (20, -13) must appear almost straight ahead and the car (50, -17) to the right. With `compass_ring.yaml`, standing
 at the origin and turning to 90 / 0 / 270 / 180 degrees must show cone / car / chair / person.
 
+**2b. Car test: a pedestrian coming from the left.** No waypoints are needed: the insertion node only uses the
+car's current pose. (Waypoints are for the modular agent, later.) Pick a straight, empty stretch and:
+1. Park at the start, facing along the stretch. Start the node with any config so it prints the pose, and
+   read the heading:
+   ```bash
+   ros2 launch hil insertion.launch.py config_path:=gem/static_cone_30m.yaml auto_origin_alt:=true \
+       rgb_topic:=/zed/zed_node/left/image_rect_color depth_topic:=/zed/zed_node/depth/depth_registered
+   ros2 topic echo --once /insnavgeod --field heading        # compass degrees, 0 = north, 90 = east
+   ```
+   The log line `camera ENU (x, y, z)` is the start position. Stop the node.
+2. Compute where the pedestrian stands: `d` metres ahead of the car and `left` metres to the left of its line,
+   walking to the right (the same numbers as `configs/gem/jaywalker.yaml` for a car facing east):
+   ```bash
+   python3 - <<'E'
+   import math
+   x0, y0, hdg = -3.7, -13.5, 90.0   # <- start ENU position (from the log) and heading (from /insnavgeod)
+   d, left = 25.0, 4.0               # pedestrian: 25 m ahead, 4 m left of the car's line
+   t = math.radians(hdg)
+   E = x0 + d * math.sin(t) - left * math.cos(t)
+   N = y0 + d * math.cos(t) + left * math.sin(t)
+   walk = (hdg + 90) % 360           # compass direction it walks: across, to the car's right
+   print(f"pos: [{-E:.1f}, 0.0, {N:.1f}]   rot: [0.0, {(-walk) % 360:.1f}, 0.0]")
+   E
+   ```
+3. Copy `configs/gem/jaywalker.yaml` to `configs/gem/my_pedestrian.yaml`, put the printed `pos` and `rot` into
+   `actor_0.object2scenario`, and set `trigger_distance` (the pedestrian starts walking when the car is that close
+   to where it stands; it stands still before that). Use 15 for a car that drives towards it, 30 to see it walk at once.
+4. Run it and look at `/insertion/rendered_image` (`rqt_image_view`):
+   ```bash
+   ros2 launch hil insertion.launch.py config_path:=gem/my_pedestrian.yaml auto_origin_alt:=true \
+       rgb_topic:=/zed/zed_node/left/image_rect_color depth_topic:=/zed/zed_node/depth/depth_registered
+   ```
+   Start the node with the car at the same spot (it takes the starting height as ground level). You should see
+   the pedestrian ahead on the left, then walking to the right once triggered. The log line `obstacles (ENU ...)`
+   must show the pedestrian at the position you intended. If it is on the wrong side, the heading is off (see
+   "Heading" below); if it floats or sinks, the camera height is not 1.8 m.
+
 **3. Define your own objects.** Copy a config from `configs/gem/` and edit `object_configs` (or `actor_configs`):
 - **Position:** the renderer's world frame is x = -East, y = Up, z = North. An object at local position
   (E, N) therefore needs `pos: [-E, 0.0, N]` in `object2scenario` (with `scenario2world.pos: [0.0, -1.8, 0.0]`).
@@ -93,13 +135,17 @@ at the origin and turning to 90 / 0 / 270 / 180 degrees must show cone / car / c
 
 **4. Things that move the objects away from where you expect:**
 - **Height.** The ground plane is 1.8 m below the camera height at the origin. `auto_origin_alt:=true` takes the
-  first GNSS height as local z = 0; otherwise set `ORIGIN_ALT` in `hil/origin.py`. If the antenna is not about
+  first GNSS height as local z = 0; otherwise set `ORIGIN_ALT` in `hil_common/origin.py`. If the antenna is not about
   1.8 m above the ground, change every `-1.8` in the config (`world.scenario2world`, `static_objects.scenario2world`)
   to minus your antenna height, or the objects float or sink.
 - **Camera model.** `camera_config.fov` is the *vertical* field of view in degrees; for your ZED use
   `2*atan(720 / (2*fy))` from `camera_info` (about 68.6 for a ZED2 at HD720; the configs use 72).
-- **Heading / roll / pitch.** The `TODO(USER)` items: confirm `/insnavgeod` heading is a compass heading (the
-  compass test above does that), and the roll/pitch signs.
+- **Heading.** `/insnavgeod` heading reads about 0 facing north on the car; a phone compass differed by ~10 deg, which
+  may just be the phone. A heading error rotates the camera against the objects (10 deg = 5 m sideways at 30 m).
+  To measure it, drive straight at 3-5 m/s and compare `atan2(dEast, dNorth)` from `/navsatfix` with the reported
+  heading; a constant offset goes into `HEADING_OFFSET_DEG` in `hil_common/origin.py` (do this before recording waypoints).
+- **Roll / pitch.** Checked on the car: nose up gives larger pitch, right side up gives smaller roll, which matches
+  `pose.py`, so no sign flips. Both read about -1.3 deg on level ground (mount bias or slope), left uncorrected.
 - **GNSS pose = camera pose.** There is no camera mount offset, as in the original code.
 - **Output size.** The image is rendered and published at the config's `window_size` (640x360), not at camera
   resolution, and the depth is the virtual objects only (100 m elsewhere). The modular agent assumes 1280x720
@@ -108,13 +154,13 @@ at the origin and turning to 90 / 0 / 270 / 180 degrees must show cone / car / c
 - `/insertion/obstacle_poses` is now in the local ENU frame (the ROS 1 node published renderer coordinates).
 
 ## Septentrio / PACMod inputs and the local frame
-The nodes no longer use the Novatel `Inspva` topic. Inputs (names fixed in `src/hil/src/hil/globals.py`):
+The nodes no longer use the Novatel `Inspva` topic. Inputs (names fixed in `src/hil/src/hil_common/globals.py`):
 - `/navsatfix` (`sensor_msgs/NavSatFix`): lat/lon
 - `/insnavgeod` (`septentrio_gnss_driver/INSNavGeod`): heading, pitch, roll, height
 - `/pacmod/vehicle_speed_rpt` (`VehicleSpeedRpt`): ego speed in m/s
 
 All poses, waypoints and virtual objects live in one local East-North-Up frame (metres) centred on the
-origin in `src/hil/src/hil/origin.py` (same as `gem_gnss_control` `e2_pp.yaml`). Waypoints are header-less
+origin in `src/hil/src/hil_common/origin.py` (same as `gem_gnss_control` `e2_pp.yaml`). Waypoints are header-less
 CSV rows `x, y, heading_deg` in that frame, so files recorded by `gem_gnss_control/record_waypoints.py`
 (`save_waypoint_node.py` here is ROS 1 only) work directly as `waypoint_csv_path`. Search for `TODO(USER)` for the
 values you still need to check (heading convention, roll/pitch signs, origin height, ZED topic names).
@@ -171,7 +217,7 @@ Python dependencies for everything: `pip install -r requirements.txt` (see the h
 [Run insertion]
 ```bash
 git checkout bug_drifting
-cd src/hil/src/hil
+cd src/hil/src/hil_common
 python insertion_colmap.py # insert with COLMAP poses
 python insertionEngine.py  # insert with GPS poses
 ```

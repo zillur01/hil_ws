@@ -2,16 +2,16 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-from hil import origin
+from hil_common import origin
 
 
 def gnss_to_cam2world(gnss: 'GnssSample') -> np.ndarray:
     """4x4 transform of the car/camera in local ENU world coordinates
-    (east, north, up in metres from hil.origin.ORIGIN_LAT/LON; up is relative to origin.ORIGIN_ALT).
+    (east, north, up in metres from hil_common.origin.ORIGIN_LAT/LON; up is relative to origin.ORIGIN_ALT).
 
     The GNSS pose is used directly as the camera pose (no mount offset), as in the original code.
     Args:
-        gnss: hil.gnss.GnssSample (lat/lon from NavSatFix, rest from INSNavGeod)
+        gnss: hil_common.gnss.GnssSample (lat/lon from NavSatFix, rest from INSNavGeod)
     """
     east, north, up = origin.geodetic_to_local(gnss.lat, gnss.lon, gnss.height)
     # Checked on the car: nose up -> pitch increases, right side up -> roll decreases, which is

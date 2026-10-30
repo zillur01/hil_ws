@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from calibration.calibrationNodes import arucoMappingNode
 import numpy as np
-from hil.globals import * 
+from hil_common.globals import * 
 
 def main():
     desired_ids = [5, 11]

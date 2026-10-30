@@ -1,6 +1,6 @@
 # Orientation check: four different objects 10 m from the origin.
 # East: cone, North: car, West: chair, South: person. Stand at the origin and turn.
-# Renderer frame: x = -East, y = Up, z = North (metres), origin = hil/origin.py ORIGIN_LAT/LON.
+# Renderer frame: x = -East, y = Up, z = North (metres), origin = hil_common/origin.py ORIGIN_LAT/LON.
 # An object at local position (E east, N north) uses `pos: [-E, 0.0, N]` in object2scenario.
 # The ground plane is 1.8 m below the camera height at the origin (world.scenario2world, y = -1.8).
 mode: production

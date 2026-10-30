@@ -4,8 +4,8 @@ import message_filters
 from sensor_msgs.msg import PointCloud2, Image
 import ros_numpy
 from cv_bridge import CvBridge
-import hil.utils as ut
-from hil.globals import *
+import hil_common.utils as ut
+from hil_common.globals import *
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.1 # allowed difference in seconds between messages to sync

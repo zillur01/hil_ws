@@ -2,7 +2,7 @@
 """ROS 2 node: inserts virtual objects (HIL_realtime_rendering) into the camera image.
 
 Inputs : RGB + depth (time-synced), /navsatfix + /insnavgeod (camera pose in the local ENU frame,
-         see hil/origin.py)
+         see hil_common/origin.py)
 Outputs: /insertion/rendered_image (rgb8), /insertion/rendered_depth (32FC1, depth of the virtual
          objects only, 100 m where there are none), /insertion/obstacle_poses (PoseArray in the
          local ENU frame), /insertion/latency
@@ -29,12 +29,12 @@ from scipy.spatial.transform import Rotation as R
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64
 
-from hil import origin
-from hil.globals import (RGB_TOPIC, DEPTH_IM_TOPIC, SIM_IMAGE, SIM_DEPTH,
+from hil_common import origin
+from hil_common.globals import (RGB_TOPIC, DEPTH_IM_TOPIC, SIM_IMAGE, SIM_DEPTH,
                          SIM_OBSTACLE_POSES, SIM_LATENCY)
-from hil.gnss import GnssState
-from hil.pose import gnss_to_cam2world
-from hil.ros_image import imgmsg_to_rgb, depth_msg_to_meters, rgb_to_imgmsg, depth_to_imgmsg
+from hil_common.gnss import GnssState
+from hil_common.pose import gnss_to_cam2world
+from hil_common.ros_image import imgmsg_to_rgb, depth_msg_to_meters, rgb_to_imgmsg, depth_to_imgmsg
 
 FRAME_RATE = 50  # how often the render timer checks for a new frame
 

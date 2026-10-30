@@ -17,7 +17,7 @@ from sensor_msgs.msg import NavSatFix
 from septentrio_gnss_driver.msg import INSNavGeod
 from pacmod2_msgs.msg import VehicleSpeedRpt
 
-from hil.globals import NAVSATFIX_TOPIC, INSNAVGEOD_TOPIC, PACMOD_SPEED_TOPIC
+from hil_common.globals import NAVSATFIX_TOPIC, INSNAVGEOD_TOPIC, PACMOD_SPEED_TOPIC
 
 GnssSample = namedtuple('GnssSample', [
     'lat', 'lon',            # deg (NavSatFix)

@@ -29,7 +29,7 @@ tqdm
 pyyaml
 pillow>=9.5          # insertion_node uses PIL.Image.Resampling (>= 9.1)
 opencv-python
-pymap3d              # lat/lon -> local ENU frame (hil/origin.py), same lib as gem_gnss_control
+pymap3d              # lat/lon -> local ENU frame (hil_common/origin.py), same lib as gem_gnss_control
 torch
 torchvision
 

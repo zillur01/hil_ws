@@ -23,9 +23,9 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import Float64
 import message_filters
 
-from hil.globals import RGB_TOPIC, DEPTH_IM_TOPIC, MODULAR_OUTPUT, MODULAR_LATENCY
-from hil.gnss import GnssState
-from hil.origin import compass_heading_deg, latlon_to_local, load_local_waypoints
+from hil_common.globals import RGB_TOPIC, DEPTH_IM_TOPIC, MODULAR_OUTPUT, MODULAR_LATENCY
+from hil_common.gnss import GnssState
+from hil_common.origin import compass_heading_deg, latlon_to_local, load_local_waypoints
 
 FRAME_RATE = 8
 
@@ -66,7 +66,7 @@ class ModularAgentNode(Node):
                 "or pass the 'agent_dir' parameter.")
 
         # Planned xza waypoint trajectory, recorded in the local ENU frame (x, y, heading_deg,
-        # header-less CSV, see hil/origin.py). Same format as gem_gnss_control's waypoints.
+        # header-less CSV, see hil_common/origin.py). Same format as gem_gnss_control's waypoints.
         self.xzas = load_local_waypoints(waypoint_path)
         self.get_logger().info(f"Loaded {len(self.xzas)} waypoints from {waypoint_path}")
         # Closest point in trajectory to our current position

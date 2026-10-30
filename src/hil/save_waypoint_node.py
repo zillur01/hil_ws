@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Records waypoints in the local ENU frame (hil/origin.py), same CSV format as
+"""Records waypoints in the local ENU frame (hil_common/origin.py), same CSV format as
 gem_gnss_control's record_waypoints.py: header-less rows of `x, y, heading_deg`.
 
 Drive the route manually (or play a bag of it) with this node running. The output
@@ -12,8 +12,8 @@ import os
 import rospkg
 import rospy
 
-from hil.gnss import GnssState
-from hil.origin import latlon_to_local
+from hil_common.gnss import GnssState
+from hil_common.origin import latlon_to_local
 
 MIN_DISTANCE_M = 0.5  # only append a point after moving this far from the last one
 RATE_HZ = 5.0

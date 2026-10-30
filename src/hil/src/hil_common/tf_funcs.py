@@ -5,11 +5,11 @@ import tf.transformations as tftrans
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-from hil.utils import *
+from hil_common.utils import *
 k_tf_timeout = rospy.Duration(1) # timeout for waiting for a tf msg
 
-# get_gps_tf now lives in hil.pose (ROS-free); re-exported here for the ROS 1 nodes.
-from hil.pose import get_gps_tf  # noqa: E402,F401
+# get_gps_tf now lives in hil_common.pose (ROS-free); re-exported here for the ROS 1 nodes.
+from hil_common.pose import get_gps_tf  # noqa: E402,F401
 
 def get_tf(src_frame: str, dst_frame: str, tf_listener: tf.TransformListener, common_t = None, convertToTransform=True) -> 'tuple[np.ndarray, np.ndarray]':
     "Gets the transform from src to dst based on the /tf or /tf_static topic data"

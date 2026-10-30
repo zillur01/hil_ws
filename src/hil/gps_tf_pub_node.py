@@ -2,9 +2,9 @@
 import tf, tf2_ros
 import numpy as np
 import rospy
-from hil import rviz_tools, tf_funcs, utils
-from hil.globals import *
-from hil.gnss import GnssState
+from hil_common import rviz_tools, tf_funcs, utils
+from hil_common.globals import *
+from hil_common.gnss import GnssState
 from geometry_msgs.msg import TransformStamped, Transform
 
 class gps_to_tf_node:

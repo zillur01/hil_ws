@@ -2,7 +2,7 @@
 # Triggered when the car comes within `trigger_distance` of the pedestrian, then walks along its own
 # heading: rot y = 0 walks north, 180 south, 90 west, 270 east (3 renderer frames per step, 0.05 m per
 # unit step => speed depends on the rendered frame rate).
-# Renderer frame: x = -East, y = Up, z = North (metres), origin = hil/origin.py ORIGIN_LAT/LON.
+# Renderer frame: x = -East, y = Up, z = North (metres), origin = hil_common/origin.py ORIGIN_LAT/LON.
 # An object at local position (E east, N north) uses `pos: [-E, 0.0, N]` in object2scenario.
 # The ground plane is 1.8 m below the camera height at the origin (world.scenario2world, y = -1.8).
 mode: production

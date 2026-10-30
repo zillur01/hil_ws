@@ -1,6 +1,6 @@
 <launch>
   <!-- TODO(USER): check the /zed2/... remaps below match your ZED topic names (e.g. /zed/zed_node/...).
-       GNSS + speed topics (/navsatfix, /insnavgeod, /pacmod/vehicle_speed_rpt) are fixed in hil/globals.py. -->
+       GNSS + speed topics (/navsatfix, /insnavgeod, /pacmod/vehicle_speed_rpt) are fixed in hil_common/globals.py. -->
   <param name="/use_sim_time" value="true"/>
   <node
     name="play" 
