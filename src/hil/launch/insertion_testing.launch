@@ -1,0 +1,28 @@
+<launch>
+  <arg name="use_bag" default="0"/>
+  <arg name="config_path" default="/home/ashwath/HIL_Research/src/hil/src/HIL_realtime_rendering/configs/exp_1/scen_1/path_1.yaml"/>
+
+  <group if="$(eval arg('use_bag') ==1)">
+    <param name="/use_sim_time" value="true"/>
+    <node
+      name="play" 
+      pkg="rosbag" 
+      type="play" 
+      args="/home/ashwath/rosbags/jaywalker.bag
+              --clock 
+              --delay=5"
+    />
+  </group>
+  <!-- <include file="$(find hil)/launch/base.launch"/> -->
+  <node name="insertion" pkg="hil" 
+    type="insertion_node.py" output="screen">
+    <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
+    <remap from="/depth" to="/zed2/zed_node/depth/depth_registered"/>
+    <remap from="/cloud" to="/lidar1/velodyne_points"/>
+    <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
+    <remap from="/gps" to="/novatel/inspva"/>
+    <param name="config_path" value="$(arg config_path)" /> 
+
+  </node>
+
+</launch>

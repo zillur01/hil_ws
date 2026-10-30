@@ -1,0 +1,36 @@
+numpy
+opencv-python
+matplotlib
+pillow==9.3.0
+# Insertion Requirements
+objloader
+pyrr
+moderngl==5.7.2
+moderngl-window==2.4.2
+pygame==2.1.2
+omegaconf==2.3.0
+pyglm
+trimesh
+# install torch and torchvision separaetely
+# IL
+pytorch-lightning
+# Modular Autonomy Requirements
+EasyDict==1.7
+shapely
+Cython
+scipy
+pandas
+pyyaml
+json_tricks
+scikit-image
+yacs>=0.1.5
+tensorboardX>=1.6
+tqdm
+ninja
+open3d
+pyransac3d
+matplotlib
+PyQt5
+timm
+# GPS code Requirements
+utm

@@ -1,0 +1,6 @@
+.git/
+build/
+devel/
+logs/
+src/hil/data
+src/hil/src/HIL_realtime_rendering/assets

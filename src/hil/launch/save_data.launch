@@ -1,0 +1,27 @@
+<launch>
+  <arg name="input_bag_path" default="/home/bhargav/Downloads/straight_pass/straight_2023-01-05-14-05-39.bag"/>
+  <!-- <arg name="input_bag_path" default="/home/bhargav/catkin_ws/src/HIL_Research/src/hil/data/GEM_rosbags/outdoor1.bag"/> -->
+
+  <param name="/use_sim_time" value="true"/>
+  <node
+    name="play" 
+    pkg="rosbag" 
+    type="play" 
+    args="$(arg input_bag_path)
+            --clock -r 1
+            --delay=2"
+  />
+
+  <include file="$(find hil)/launch/base.launch"/>
+
+  <node 
+    name="save_data_node" pkg="hil" 
+    type="save_data_node.py" output="screen">
+    <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
+    <remap from="/cloud" to="/lidar1/velodyne_points"/>
+    <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
+    <remap from="/gps" to="/novatel/inspva"/>
+    <param name="input_bag_path" value="$(arg input_bag_path)" /> 
+   </node>
+
+</launch>

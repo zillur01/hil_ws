@@ -1,0 +1,11 @@
+<launch>
+
+  <node name="gps_tf_pub_node" pkg="hil" 
+    type="gps_tf_pub_node.py" output="log">
+    <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
+    <remap from="/cloud" to="/lidar1/velodyne_points"/>
+    <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
+    <remap from="/gps" to="/novatel/inspva"/>
+  </node>
+
+</launch>

@@ -1,0 +1,43 @@
+<launch>
+  <arg name="use_bag" default="0"/>
+  <arg name="use_inserted_data" default="0"/>
+  <arg name="waypoint_csv_path" default="/home/yshen47/Documents/rosbags/static_path1_gps.csv"/>
+  <group if="$(eval arg('use_bag') ==1)">
+    <param name="/use_sim_time" value="true"/>
+    <group if="$(eval arg('use_inserted_data') ==0)">
+      <node
+        name="play" 
+        pkg="rosbag" 
+        type="play" 
+        args="/media/bhargav/03E7-EC27/cone_bags/speed_profile/cone2_2022-12-12-16-30-37.bag
+                --clock -r 0.1
+                --delay=3 "
+      />
+    </group>
+  </group>
+  <!-- <include file="$(find hil)/launch/base.launch"/> -->
+  <group if="$(eval arg('use_inserted_data') ==0)">
+    <node name="modular_agent" pkg="hil" 
+      type="modular_agent_node.py" output="screen">
+      <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
+      <remap from="/depth" to="/zed2/zed_node/depth/depth_registered"/>
+      <remap from="/cloud" to="/lidar1/velodyne_points"/>
+      <remap from="/rgb" to="/zed2/zed_node/left/image_rect_color"/>
+      <remap from="/gps" to="/novatel/inspva"/>
+      <param name="waypoint_csv_path" value="$(arg waypoint_csv_path)" /> 
+    </node>
+  </group>
+
+  <group unless="$(eval arg('use_inserted_data') ==0)">
+    <node name="modular_agent" pkg="hil" 
+      type="modular_agent_node.py" output="screen">
+      <remap from="/camera_info" to="/zed2/zed_node/left/camera_info"/>
+      <remap from="/depth" to="/insertion/rendered_depth"/>
+      <remap from="/cloud" to="/lidar1/velodyne_points"/>
+      <remap from="/rgb" to="/insertion/rendered_image"/>
+      <remap from="/gps" to="/novatel/inspva"/>
+      <param name="waypoint_csv_path" value="$(arg waypoint_csv_path)" /> 
+    </node>
+  </group>
+  
+</launch>
