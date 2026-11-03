@@ -1,8 +1,9 @@
 # HIL_Research
-> **Status (branch `dev`):** being ported from ROS 1 Noetic/Docker to **ROS 2 Humble**. Ported so far: the modular
-> agent and the virtual-object insertion (see "ROS 2 quickstart" and "First test"). The Docker/catkin instructions
-> further down are obsolete, and the other nodes in `src/hil/` (metrics, save_data, IL, mapping, lidar calibration)
-> are still ROS 1 only.
+> **Status (branch `dev`):** ported from ROS 1 Noetic/Docker to **ROS 2 Humble**. All nodes and launch files in
+> `src/hil/` are ROS 2 (see "ROS 2 quickstart", "First test" and "Other nodes"), except the lidar-camera calibration
+> (`aruco_markers.py`, `src/calibration/`, `launch/find_transform_real.launch` and the `lidar_camera_calibration`
+> package), which is still ROS 1 only. The Docker/catkin instructions and the shell scripts in `scripts/` further
+> down are ROS 1 and obsolete.
 >
 > **Layout:** `src/hil/` is the ROS 2 package (`package.xml`, `setup.py`, nodes, launch files).
 > `src/hil/src/hil_common/` is the Python library the nodes import (`from hil_common import origin`; it was
@@ -210,14 +211,38 @@ The nodes no longer use the Novatel `Inspva` topic. Inputs (names fixed in `src/
 All poses, waypoints and virtual objects live in one local East-North-Up frame (metres) centred on the
 origin in `src/hil/src/hil_common/origin.py` (same as `gem_gnss_control` `e2_pp.yaml`). Waypoints are header-less
 CSV rows `x, y, heading_deg` in that frame, so files recorded by `gem_gnss_control/record_waypoints.py`
-(`save_waypoint_node.py` here is ROS 1 only) work directly as `waypoint_csv_path`. Search for `TODO(USER)` for the
+(or by `save_waypoints.launch.py` here) work directly as `waypoint_csv_path`. Search for `TODO(USER)` for the
 values you still need to check (heading convention, roll/pitch signs, origin height, ZED topic names).
 
 Python dependencies for everything: `pip install -r requirements.txt` (see the header for torch/detectron2).
 
-## Data Setup
-- A box folder with recorded data and model files mirrors the structure of the `src/HIL_Research/hil/data/` folder
-- Download desired data from the `data/` folder in [box storage](https://uofi.box.com/s/ivdfygn9meyj8cjahn5d5j6hd570sjz8) into the respective subfolder
+## Other nodes (ROS 2)
+Build as in the quickstart (`--symlink-install`). Every launch file takes `use_sim_time` or plays a bag with
+`--clock` itself; topic names default to the ZED (`/zed/zed_node/...`) and `/lidar1/velodyne_points` and can be
+changed with the `*_topic` arguments (`ros2 launch hil <file> --show-args`).
+
+| launch | what it does |
+|---|---|
+| `base.launch.py` | tf `world -> gps` (car pose in the local frame) and an axis marker on `/gps_vis_marker` for RViz |
+| `metrics.launch.py waypoint_csv_path:=...` | time to the last waypoint, distance to the virtual obstacle at the first IL brake, average latencies |
+| `save_waypoints.launch.py csv_name:=...` | records waypoints (same format as `gem_gnss_control`) to `src/hil/data/waypoints/`; `bag_path:=` to record from a bag |
+| `save_data.launch.py input_bag_path:=...` | plays a bag and saves synced images, depth (`.npy`, metres) and GNSS poses to `<bag dir>_extracted/<bag name>/` |
+| `save_data_IL.launch.py input_bag_path:=...` | plays a bag at half speed and writes `synced.csv` for imitation learning; stops by itself when the bag ends |
+| `gen_map.launch.py bag_path:=...` | colored lidar map on `/projected` (RViz, fixed frame `world`) |
+| `lidar2cam.launch.py` | lidar points projected onto the image (`/projected_vis`) to check `T_lidar_rgb` in `globals.py`; `bag_path:=` optional |
+| `il_agent.launch.py` | imitation-learning agent: `/il/pred_brake` (`pacmod2_msgs/SystemCmdFloat`), `/il/desired_speed` |
+
+Notes:
+- **Bags** are ros2 bags (directories). ROS 1 `.bag` files can be converted with `pip install rosbags` and
+  `rosbags-convert --src old.bag --dst old`, but the old bags have the Novatel and ROS 1 PACMod topics, not
+  `/navsatfix`, `/insnavgeod` and `/pacmod/vehicle_speed_rpt`, so the GNSS-based nodes need new recordings.
+- **PACMod** topics are those of the ROS 2 driver: `/pacmod/accel_cmd` and `/pacmod/brake_cmd`
+  (`SystemCmdFloat`), `/pacmod/steering_rpt` (`SystemRptFloat`). The IL brake output changed from `PacmodCmd.f64_cmd`
+  to `SystemCmdFloat.command`. ROS 2 headers have no `seq`, so the `*_seqnum` columns of `synced.csv` count the
+  messages received per topic (0 = first one) instead of holding ROS 1 sequence numbers.
+- The **IL agent** is a git submodule: `git submodule update --init src/hil/src/HIL_imitation_learning`.
+- `gen_map` / `lidar2cam` need a lidar (none is mentioned in the car setup above); the mapping node syncs lidar and
+  image within 10 ms, as before.
 
 ## Codebase Structure
 - The docker structure of this codebase is based on the template here: https://github.com/nachovizzo/ros_in_docker \
@@ -239,36 +264,44 @@ Python dependencies for everything: `pip install -r requirements.txt` (see the h
     - `package.xml` : Metadata for the package
 
 - `lidar_camera_calibration/` : calibration package cloned from [repo](https://github.com/ankitdhall/lidar_camera_calibration)
-- `novatel_gps_msgs` : Defines gps-related ros messages, cloned from [repo](https://github.com/swri-robotics/novatel_gps_driver/tree/master/novatel_gps_msgs)
 - `scripts` : not a ros package, holds some convience shell scripts to record rosbags or setup dependecies
 ### General Notes
 - In most cases, it is relatively easy to convert non-ros code to use ros. But it is often easier to debug when working with a single image/data point instead of an entire rosbag(note that we have ros script to convert a bag in to standard image/data files). 
 - So after running a certain step(insertion, object detection etc.) without ros, we can just convert the appropriate ros messages into the desired python format(cv2, numpy, etc.) and call our standalone python code in to create a functioning ros node.
 
-## Visualizations
-- A good visualizer for rosbags and live ros data is [Foxglove Studio](https://foxglove.dev/)
-- TODO: Upload example panel jsons
-## ~~OLD Getting Started with local ros install~~ 
-1. Setup your catkin workspace: `mkdir -p ~/catkin_ws/src` and clone this repo into the `src` subfolder
-2. Run `sh setup_scripts/ros_noetic_install.sh` to install ros noetic
-3. Install package dependencies with: `cd ~/catkin_ws && rosdep install --from-paths src --ignore-src -r -y`
-4. `cd ~/catkin_ws` and `catkin_make` to build the packages in your workspace
-5. `source devel/setup.bash` so ros know where to find your custom packages
-6. Download the desired data from box. See [Data Setup](https://github.com/bchandaka/HIL_Research/edit/main/README.md#data-setup)
-7. Try out some of `hil` package launch files!
 
-## Virtual object insertion 
-[Data arrangement]
-- Data are under `src/hil/data/`
-- Download data **extracted_bags** from [Box](https://uofi.app.box.com/folder/182731812480), and put under `src/hil/data/`
+## Virtual object insertion with COLMAP poses (offline)
+[COLMAP](https://colmap.github.io/) is a structure-from-motion tool: given many photos of a scene, it finds matching
+features between them and computes the camera pose of every photo (and a sparse 3D point cloud). Here it is an
+offline alternative to the GNSS poses: `insertion_colmap.py` renders a 3D object into a recorded image sequence using
+the camera poses COLMAP estimated from the images themselves, so the object should not drift the way it can with
+GNSS/INS noise. It does not use ROS and is not part of the real-time pipeline. COLMAP poses have an arbitrary origin,
+orientation and scale, so the object position (`model_mat` in `run_offline`) is in COLMAP units, not metres: tune it
+by hand per sequence.
 
-[Run insertion]
+**1. Get an image sequence.** Download **extracted_bags** from [Box](https://uofi.app.box.com/folder/182731812480) into
+`src/hil/data/` (it has `outdoor1/img/im_<N>.png` and, possibly, a ready COLMAP model), or extract your own drive with
+`save_data.launch.py` (above), which writes `img/im_<N>.png`. The renderer is hard-coded to 1280x720 images.
+
+**2. Run COLMAP** (`sudo apt install colmap`, or the GUI). The script expects one camera with the `PINHOLE` or `OPENCV`
+model and the text model in `colmap/opencv/sparse/txt/` next to `img/`:
 ```bash
-git checkout bug_drifting
-cd src/hil/src/hil_common
-python insertion_colmap.py # insert with COLMAP poses
-python insertionEngine.py  # insert with GPS poses
+cd src/hil/data/extracted_bags/outdoor1
+mkdir -p colmap/opencv/sparse/txt
+colmap feature_extractor --database_path colmap/opencv/db.db --image_path img \
+    --ImageReader.camera_model OPENCV --ImageReader.single_camera 1
+colmap sequential_matcher --database_path colmap/opencv/db.db      # images are a video sequence
+colmap mapper --database_path colmap/opencv/db.db --image_path img --output_path colmap/opencv/sparse
+colmap model_converter --input_path colmap/opencv/sparse/0 --output_path colmap/opencv/sparse/txt --output_type TXT
 ```
-and the output files are:
-- COLMAP: `src/hil/data/extracted_bags/outdoor1/insertion_output_colmap`
-- GPS: `src/hil/data/extracted_bags/outdoor1_w_raw_gps_depth/insertion_output`.
+Check that `sparse/0` is the only (or the largest) model: if COLMAP splits the sequence, only the frames in the model
+you convert get poses.
+
+**3. Insert the object.** It renders `data/models/dummy.obj` (texture `dummy.jpg`) into every frame that has a pose:
+```bash
+cd src/hil/src/hil_common
+python insertion_colmap.py   # output: data/extracted_bags/outdoor1/insertion_output_colmap/ (PNGs + video.mp4)
+python insertionEngine.py    # same, with the GNSS poses, for comparison (reads outdoor1_better_sync)
+```
+`src/hil/colmap.py` (run from `src/hil/`) exports the COLMAP poses to `.npy` files and shows the camera path with
+`vedo` (`test_pose()`); edit its `dir_colmap` if your model is in `colmap/opencv/sparse/txt`.

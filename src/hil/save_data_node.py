@@ -1,112 +1,116 @@
 #!/usr/bin/env python3
-import numpy as np
-import rospy
-import message_filters
-from sensor_msgs.msg import PointCloud2, Image
-import ros_numpy
-from cv_bridge import CvBridge
-import cv2
-from hil_common.utils import *
-from hil_common.tf_funcs import *
-from hil_common.globals import *
-from hil_common.gnss import GnssState
-from hil_common import origin
-import rospkg
-import os
-import datetime 
-from PIL import Image as pil_img
+"""Extracts a recorded drive into files: time-synced RGB images (img/im_N.png), depth maps
+(depth_img/depth_imN.npy, metres) and the GNSS/INS state at that moment (raw_gps/raw_gps_N.npy:
+lat, lon, height, roll, pitch, compass heading deg, stamp, vn, ve), plus camera_info.npz.
 
-rospack = rospkg.RosPack()
+Parameter `input_bag_path`: the ros2 bag being played (only used to name the output directory,
+<bag dir>_extracted/<bag name>/). Normally started by save_data.launch.py, which also plays the bag."""
+import os
+
+import cv2
+import message_filters
+import numpy as np
+import rclpy
+from cv_bridge import CvBridge
+from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import Image
+
+from hil_common import origin
+from hil_common.globals import CAMERA_INFO_TOPIC, DEPTH_IM_TOPIC, RGB_TOPIC
+from hil_common.gnss import GnssState
+from hil_common.ros_image import depth_msg_to_meters
+from hil_common.utils import get_camera_info, get_dist_matrix, get_img_size, get_projection_matrix, stamp_to_sec
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 
-class saveDataNode:
-    def __init__(self, save_dir):
-        rospy.init_node('saveData', anonymous=True)
-        self.fileDir = save_dir
+
+def output_dir_for_bag(bag_path):
+    bag_path = os.path.normpath(bag_path)  # ros2 bags are directories: drop a trailing '/'
+    bag_filename = os.path.splitext(os.path.basename(bag_path))[0]
+    return os.path.join(os.path.dirname(bag_path) + "_extracted", bag_filename)
+
+
+class SaveDataNode(Node):
+    def __init__(self):
+        super().__init__('save_data_node')
+        bag_path = self.declare_parameter('input_bag_path', '').value
+        if not bag_path:
+            raise RuntimeError("Parameter 'input_bag_path' is required")
+        self.fileDir = output_dir_for_bag(bag_path)
+        self.get_logger().info(f"Saving to {self.fileDir}")
         self.img_path = os.path.join(self.fileDir, 'img')
-        self.pc_path = os.path.join(self.fileDir, 'pc')
-        self.pose_path = os.path.join(self.fileDir, 'pose')
         self.raw_gps_path = os.path.join(self.fileDir, 'raw_gps')
         self.depth_path = os.path.join(self.fileDir, 'depth_img')
-
         for _path in [self.fileDir, self.img_path, self.depth_path, self.raw_gps_path]:
-            if not os.path.exists(_path):
-                os.makedirs(_path)
-       
-        self.camera_info = get_camera_info(CAMERA_INFO_TOPIC)
+            os.makedirs(_path, exist_ok=True)
+
+        self.camera_info = get_camera_info(self, CAMERA_INFO_TOPIC)
+        if self.camera_info is None:
+            raise RuntimeError(f"No camera info received on {CAMERA_INFO_TOPIC}")
         self.P = get_projection_matrix(self.camera_info)
         self.D = get_dist_matrix(self.camera_info)
         np.savez(os.path.join(self.fileDir, 'camera_info.npz'), P=self.P, D=self.D)
         self.height, self.width = get_img_size(self.camera_info)
 
         self.bridge = CvBridge()
-        
-        self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
-        self.image_sub = message_filters.Subscriber(RGB_TOPIC,Image)
-        self.gnss = GnssState()
-        self.depth_sub = message_filters.Subscriber(DEPTH_IM_TOPIC, Image)
-
-        self.pc_im_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.image_sub, self.depth_sub], 
-            k_time_sync_queue_size, 
+        self.gnss = GnssState(self)
+        self.image_sub = message_filters.Subscriber(self, Image, RGB_TOPIC, qos_profile=qos_profile_sensor_data)
+        self.depth_sub = message_filters.Subscriber(self, Image, DEPTH_IM_TOPIC, qos_profile=qos_profile_sensor_data)
+        self.im_depth_sub = message_filters.ApproximateTimeSynchronizer(
+            [self.image_sub, self.depth_sub],
+            k_time_sync_queue_size,
             k_time_sync_slop
             )
-        self.pc_im_sub.registerCallback(self.pc_im_callback)
+        self.im_depth_sub.registerCallback(self.im_depth_callback)
         self.iter = 0
         self.diff = 0
-        self.tf_listener = tf.TransformListener()
-        self.gps_last = np.zeros(7)
+        self.gps_last = np.zeros(9)
 
-    def pc_im_callback(self, img_msg: Image, depth_msg: Image):
+    def im_depth_callback(self, img_msg: Image, depth_msg: Image):
         cur_gps = self.gnss.snapshot()
         if cur_gps is None:
             return
-        # T_gps = get_tf(GPS_FRAME, WORLD_FRAME, self.tf_listener, convertToTransform=True)
-        self.diff += abs(cur_gps.stamp-img_msg.header.stamp.to_sec())
-        # print(cur_gps.header.stamp.to_sec()-img_msg.header.stamp.to_sec())
-        timestamp = cur_gps.stamp
+        self.diff += abs(cur_gps.stamp - stamp_to_sec(img_msg.header.stamp))
         gps_out = np.array([
-            cur_gps.lat, 
+            cur_gps.lat,
             cur_gps.lon,
             cur_gps.height,
             cur_gps.roll,
             cur_gps.pitch,
             float(origin.compass_heading_deg(cur_gps.heading)), # azimuth, compass deg
-            timestamp,
+            cur_gps.stamp,
             cur_gps.vn,
             cur_gps.ve
         ])
         if self.gps_last[0] - gps_out[0] == 0 and self.gps_last[1]-gps_out[1] == 0:
-            print(f"Same coord at {iter}")
+            print(f"Same coord at {self.iter}")
+        self.gps_last = gps_out
         curImage = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-        mode_depth='F'
-        depth_map = np.asarray(pil_img.frombytes(mode_depth, (depth_msg.width, depth_msg.height), depth_msg.data))
+        depth_map = depth_msg_to_meters(depth_msg)
 
         np.save(os.path.join(self.depth_path, f'depth_im{self.iter}.npy'), depth_map)
         cv2.imwrite(os.path.join(self.img_path, f'im_{self.iter}.png'), curImage)
         np.save(os.path.join(self.raw_gps_path, f'raw_gps_{self.iter}.npy'), gps_out)
-
-        # pts_depth = ros_numpy.point_cloud2.pointcloud2_to_array(pc_msg)
-        # # np.save(os.path.join(self.pc_path, f'pc_{self.iter}.npy'), pts_depth)
-
-        # np.save(os.path.join(self.pose_path, f'gps_{self.iter}.npy'), T_gps)
         self.iter += 1
-    def run(self):
-        rospy.spin()
 
-def main():
-    node_name = "save_data_node"
-    param_name = "input_bag_path"
-    bag_path = rospy.get_param(f'{node_name}/{param_name}')
-    bag_filename = os.path.splitext(os.path.basename(bag_path))[0]
-    extracted_dir = os.path.dirname(bag_path) + "_extracted"
-    save_dir = os.path.join(extracted_dir, bag_filename)
-    print(save_dir)
-    node = saveDataNode(save_dir)
-    node.run()
-    print(f"Done, iters:{node.iter}, {node.diff/node.iter}")
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = SaveDataNode()
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        if node.iter:
+            print(f"Done, iters:{node.iter}, avg |gps - image| stamp: {node.diff/node.iter:.4f} s")
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

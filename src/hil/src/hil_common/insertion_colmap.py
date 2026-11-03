@@ -153,7 +153,6 @@ class insertionEngine:
         if self.is_online:
             raise ValueError("run_offline() cannot be called when class is initialized with `is_online=True`")
         dir_img = os.path.join(extracted_bag_dir, 'img')
-        img_paths = sorted([os.path.join(dir_img, file) for file in os.listdir(dir_img)])
         output_dir = os.path.join(extracted_bag_dir, 'insertion_output_colmap')
         if not os.path.exists(output_dir):
             os.mkdir(output_dir)
@@ -164,7 +163,9 @@ class insertionEngine:
         deg = (rad / np.pi) * 180
         proj = Matrix44.perspective_projection(deg, w/h, 0.001, 100)
         
-        poses_cv = load_extrinsics(os.path.join(colmap_dir, 'images.txt'))
+        # one pose per image COLMAP registered, in frame order, with that image's file name
+        poses_cv, img_names = load_extrinsics(os.path.join(colmap_dir, 'images.txt'), return_names=True)
+        img_paths = [os.path.join(dir_img, name) for name in img_names]
 
         scale = 0.005
         shift = [0.0, 0.5, 0.0]
@@ -243,20 +244,26 @@ def parse_line(line):
     trans[:3, -1] = T
     return img_id, trans
 
-def load_extrinsics(images_path):
+def load_extrinsics(images_path, return_names=False):
+    """world2camera poses from a COLMAP images.txt, sorted by the frame number in the image name
+    (im_<N>.png). With return_names=True also returns the image file names in the same order."""
     id_list = []
     ext_list = []
+    name_list = []
     with open(images_path) as file:
         for line in file:
             if 'png' in line:
                 img_id, pose = parse_line(line)
                 id_list.append(img_id)
                 ext_list.append(pose)
+                name_list.append(line.strip().split(' ')[-1])
     id_list = np.array(id_list)
     ext_list = np.stack(ext_list)
 
     id_sort = np.argsort(id_list)
     ext_sorted = ext_list[id_sort]
+    if return_names:
+        return ext_sorted, [name_list[i] for i in id_sort]
     return  ext_sorted
 
 def load_intrinsics(cameras_path):
@@ -307,10 +314,6 @@ def test():
     visualize_cameras(R, pos, arrow_len=0.3)
 
 def main():
-    import rospkg
-    rospack = rospkg.RosPack()
-    # extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor1')
-    # model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
     extracted_bag_dir = os.path.join('../../', 'data', 'extracted_bags/outdoor1')
     model_path = os.path.join('../../', 'data', 'models')
     colmap_dir = os.path.join(extracted_bag_dir, 'colmap/opencv/sparse/txt')

@@ -1,127 +1,128 @@
 #!/usr/bin/env python3
-import numpy as np
-import rospy
+"""Writes <bag dir>_extracted/<bag name>/synced.csv for imitation learning: for every time-synced
+RGB + depth pair, the image / GNSS / depth stamps (ns) and the index of the latest PACMod accel,
+brake, steering and speed message received at that moment.
+
+ROS 2 headers have no `seq`, so the *_seqnum columns are per-topic receive counters (0 = first
+message of that topic in the bag), not the ROS 1 header.seq values.
+
+The node exits (and writes the CSV) 5 s after the last synced frame, i.e. when the bag has ended.
+Parameter `input_bag_path`: the ros2 bag being played. Started by save_data_IL.launch.py."""
+import csv
+import os
+import time
+
 import message_filters
-from sensor_msgs.msg import PointCloud2, Image
-import ros_numpy
-from cv_bridge import CvBridge
-import cv2
-from hil_common.utils import *
-from hil_common.globals import *
+import rclpy
+from pacmod2_msgs.msg import SystemCmdFloat, SystemRptFloat, VehicleSpeedRpt
+from rclpy.clock import Clock, ClockType
+from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import Image
+
+from hil_common.globals import DEPTH_IM_TOPIC, PACMOD_SPEED_TOPIC, RGB_TOPIC
 from hil_common.gnss import GnssState
-import rospkg
-import os, sys, time
-import csv  
-from pacmod_msgs.msg import PacmodCmd, SystemRptFloat, VehicleSpeedRpt
-rospack = rospkg.RosPack()
+from hil_common.utils import stamp_to_nsec
 
 k_time_sync_queue_size = 10
 k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
+IDLE_EXIT_S = 5.0
 
-class saveDataNode:
-    def __init__(self, output_dir, extracted_bag_name):
-        rospy.init_node('saveData', anonymous=True)
-        # self.fileDir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', extracted_bag_name+"3")
-        print("inputs:", output_dir, extracted_bag_name)
-        self.extracted_dir = output_dir+"_extracted"
-        self.fileDir = os.path.join(self.extracted_dir, extracted_bag_name)
-        print("FileDir:", self.fileDir)
+# PACMod topics of the ROS 2 driver (pacmod2)
+PACMOD_ACCEL_CMD_TOPIC = "/pacmod/accel_cmd"
+PACMOD_BRAKE_CMD_TOPIC = "/pacmod/brake_cmd"
+PACMOD_STEER_RPT_TOPIC = "/pacmod/steering_rpt"
+
+
+class SaveDataILNode(Node):
+    def __init__(self):
+        super().__init__('save_data_node')
+        bag_filepath = self.declare_parameter('input_bag_path', '').value
+        if not bag_filepath:
+            raise RuntimeError("Parameter 'input_bag_path' is required")
+        bag_filepath = os.path.normpath(bag_filepath)  # ros2 bags are directories: drop a trailing '/'
+        extracted_bag_name = os.path.splitext(os.path.basename(bag_filepath))[0]
+        self.fileDir = os.path.join(os.path.dirname(bag_filepath) + "_extracted", extracted_bag_name)
+        self.get_logger().info(f"FileDir: {self.fileDir}")
         self.csv_path = os.path.join(self.fileDir, 'synced.csv')
-        for _path in [self.fileDir]:
-            if not os.path.exists(_path):
-                os.makedirs(_path)
+        os.makedirs(self.fileDir, exist_ok=True)
 
-        self.bridge = CvBridge()
-        
         # Synced topics
-        self.pc_sub = message_filters.Subscriber(LIDAR_PC_TOPIC, PointCloud2)
-        self.image_sub= message_filters.Subscriber(RGB_TOPIC,Image)
-        self.depth_sub= message_filters.Subscriber(DEPTH_IM_TOPIC,Image)
-        self.gnss = GnssState()
+        self.image_sub = message_filters.Subscriber(self, Image, RGB_TOPIC, qos_profile=qos_profile_sensor_data)
+        self.depth_sub = message_filters.Subscriber(self, Image, DEPTH_IM_TOPIC, qos_profile=qos_profile_sensor_data)
+        self.gnss = GnssState(self)
 
-        self.pc_im_sub = message_filters.ApproximateTimeSynchronizer(
-            [self.image_sub, self.depth_sub], 
-            k_time_sync_queue_size, 
+        self.im_depth_sub = message_filters.ApproximateTimeSynchronizer(
+            [self.image_sub, self.depth_sub],
+            k_time_sync_queue_size,
             k_time_sync_slop
             )
-        self.pc_im_sub.registerCallback(self.pc_im_callback)
+        self.im_depth_sub.registerCallback(self.im_depth_callback)
         self.iter = 0
 
-        # Pacmod Topics
-        # TODO(USER): IL-only. These are the old ROS1 PACMod topic names/types; the ROS2 car
-        # (pacmod2_msgs) uses different ones (e.g. /pacmod/accel_cmd, /pacmod/vehicle_speed_rpt).
-        self.pacmod_accel_seq_sub = rospy.Subscriber("/pacmod/as_rx/accel_cmd", PacmodCmd, callback=self.accel_seq_cb)
-        self.cur_accel_seq = None
-        self.pacmod_brake_seq_sub = rospy.Subscriber("/pacmod/as_rx/brake_cmd", PacmodCmd, callback=self.brake_seq_cb)
-        self.cur_brake_seq = None
-
-        self.pacmod_accel_seq_sub = rospy.Subscriber("/pacmod/parsed_tx/steer_rpt", SystemRptFloat, callback=self.steer_cb)
-        self.cur_steer_seq = None
-        self.pacmod_brake_seq_sub = rospy.Subscriber("/pacmod/parsed_tx/vehicle_speed_rpt", VehicleSpeedRpt, callback=self.speed_cb)
-        self.cur_speed_seq = None
+        # PACMod topics: count the messages of each (see module docstring)
+        self.counts = {'accel': None, 'brake': None, 'steer': None, 'speed': None}
+        for key, msg_type, topic in [('accel', SystemCmdFloat, PACMOD_ACCEL_CMD_TOPIC),
+                                     ('brake', SystemCmdFloat, PACMOD_BRAKE_CMD_TOPIC),
+                                     ('steer', SystemRptFloat, PACMOD_STEER_RPT_TOPIC),
+                                     ('speed', VehicleSpeedRpt, PACMOD_SPEED_TOPIC)]:
+            self.create_subscription(msg_type, topic, lambda _msg, k=key: self.count_cb(k), qos_profile_sensor_data)
         self.last_save_time = None
 
-        self.fields = ["image_stamp", "gps_stamp", "depth_stamp", 
+        self.fields = ["image_stamp", "gps_stamp", "depth_stamp",
                         "accel_seqnum", "brake_seqnum", "steer_seqnum", "speed_seqnum"]
         self.rows = []
-    def accel_seq_cb(self, cmd_msg: PacmodCmd):
-        self.cur_accel_seq = cmd_msg.header.seq
-    def brake_seq_cb(self, cmd_msg: PacmodCmd):
-        self.cur_brake_seq = cmd_msg.header.seq
-    def steer_cb(self, steer_msg: SystemRptFloat):
-        self.cur_steer_seq = steer_msg.header.seq
-    def speed_cb(self, speed_msg: VehicleSpeedRpt):
-        self.cur_speed_seq = speed_msg.header.seq
+        # wall clock: with use_sim_time the node clock stops when the bag ends
+        self.timer = self.create_timer(1.0, self.check_done, clock=Clock(clock_type=ClockType.STEADY_TIME))
 
-    def pc_im_callback(self,img_msg: Image, depth_msg: Image):
+    def count_cb(self, key):
+        self.counts[key] = 0 if self.counts[key] is None else self.counts[key] + 1
+
+    def im_depth_callback(self, img_msg: Image, depth_msg: Image):
         gps_msg = self.gnss.snapshot()
         if gps_msg is None:
             return
-        if self.cur_brake_seq != None and self.cur_accel_seq != None:
-            img_t = img_msg.header.stamp.to_nsec()
-            gps_t = int(gps_msg.stamp * 1e9)
-            depth_t = depth_msg.header.stamp.to_nsec()
+        if self.counts['brake'] is not None and self.counts['accel'] is not None:
             synced_row = [
-                img_t,
-                gps_t,
-                depth_t,
-                self.cur_accel_seq,
-                self.cur_brake_seq,
-                self.cur_steer_seq,
-                self.cur_speed_seq,                
+                stamp_to_nsec(img_msg.header.stamp),
+                int(gps_msg.stamp * 1e9),
+                stamp_to_nsec(depth_msg.header.stamp),
+                self.counts['accel'],
+                self.counts['brake'],
+                self.counts['steer'],
+                self.counts['speed'],
             ]
             self.rows.append(synced_row)
             self.last_save_time = time.time()
             self.iter += 1
-    def on_shutdown(self):
-        # writing to csv file 
-        print("Writing csv")
-        with open(self.csv_path, 'w') as csvfile: 
-            # creating a csv writer object 
-            csvwriter = csv.writer(csvfile) 
-                
-            # writing the fields 
-            csvwriter.writerow(self.fields) 
-                
-            # writing the data rows 
+
+    def check_done(self):
+        if self.last_save_time is not None and time.time() - self.last_save_time > IDLE_EXIT_S:
+            raise SystemExit  # leaves spin(); main() writes the CSV
+
+    def write_csv(self):
+        print(f"Writing {len(self.rows)} rows to {self.csv_path}")
+        with open(self.csv_path, 'w') as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(self.fields)
             csvwriter.writerows(self.rows)
-    def run(self):
-        rospy.on_shutdown(self.on_shutdown)
-        while not rospy.is_shutdown():
-            if self.last_save_time != None and time.time()-self.last_save_time > 5:
-                break
-            time.sleep(1)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = SaveDataILNode()
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException, SystemExit):
+        pass
+    finally:
+        node.write_csv()
         print("Shutting Down")
-        sys.exit(0)
-def main():
-    node_name = "save_data_node"
-    param_name = "input_bag_path"
-    bag_filepath = rospy.get_param(f'{node_name}/{param_name}')
-    bag_filename = os.path.splitext(os.path.basename(bag_filepath))[0]
-    extracted_dir = os.path.dirname(bag_filepath)
-    print(extracted_dir, bag_filename)
-    node = saveDataNode(extracted_dir, bag_filename)
-    node.run()
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

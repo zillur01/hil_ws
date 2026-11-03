@@ -18,7 +18,9 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         # node scripts, runnable with `ros2 run hil <name>.py`
         (os.path.join('lib', package_name),
-            ['modular_agent_node.py', 'insertion_node.py', 'fake_sensor_node.py', 'plan_pedestrian.py']),
+            ['modular_agent_node.py', 'insertion_node.py', 'fake_sensor_node.py', 'plan_pedestrian.py',
+             'il_agent_node.py', 'metrics_node.py', 'gps_tf_pub_node.py', 'mapping_node.py', 'lidar2cam_node.py',
+             'save_data_node.py', 'save_data_node_IL.py', 'save_waypoint_node.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

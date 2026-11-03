@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
-import tf, tf2_ros
-import numpy as np
-import rospy
-from hil_common import rviz_tools, tf_funcs, utils
-from hil_common.globals import *
+"""Experiment metrics: time to reach the goal (last waypoint), distance to the first virtual obstacle
+when the IL agent first brakes, and average insertion / IL / modular latencies.
+
+Parameters: `waypoint_csv_path` (local x, y, heading_deg CSV), `experiment_name`."""
+import rclpy
+from geometry_msgs.msg import PoseArray
+from pacmod2_msgs.msg import SystemCmdFloat
+from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
 from std_msgs.msg import Float64
+
+from hil_common import tf_funcs, utils
+from hil_common.globals import IL_LATENCY, IL_OUTPUT, MODULAR_LATENCY, SIM_LATENCY, SIM_OBSTACLE_POSES
 from hil_common.gnss import GnssState
 from hil_common.origin import load_local_waypoints
-from geometry_msgs.msg import PoseArray, Pose
-import message_filters 
-from pacmod_msgs.msg import PacmodCmd
 
-k_time_sync_queue_size = 10
-k_time_sync_slop = 0.03 # allowed difference in seconds between messages to sync
 PRINT_RATE = 5
 GOAL_REACHING_THRESH_M = 1
+
 
 def dist2d(p1, p2):
     return ((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)**0.5
@@ -23,23 +26,29 @@ def avg(data):
     if len(data) == 0:
         return -1
     return sum(data)/len(data)
-class metrics_node:
-    def __init__(self, waypoint_csv_path, experiment_name):
-        rospy.init_node('metrics', anonymous=True)
+
+
+class MetricsNode(Node):
+    def __init__(self):
+        super().__init__('metrics')
+        waypoint_csv_path = self.declare_parameter('waypoint_csv_path', '').value
+        self.experiment_name = self.declare_parameter('experiment_name', 'test').value
+        if not waypoint_csv_path:
+            raise RuntimeError("Parameter 'waypoint_csv_path' is required (local x,y,heading_deg CSV)")
         # Waypoints recorded in the local ENU frame (x, y, heading_deg, header-less CSV)
         wps = load_local_waypoints(waypoint_csv_path)
         self.start_pt = wps[0]
         self.goal_pt = wps[-1]
         # Subscribers
-        self.gnss = GnssState()
-        self.obstacle_pose_sub = rospy.Subscriber(SIM_OBSTACLE_POSES, PoseArray, callback=self.obstacle_dist_cb)
+        self.gnss = GnssState(self)
+        self.create_subscription(PoseArray, SIM_OBSTACLE_POSES, self.obstacle_dist_cb, 10)
         self.pt_ego = None
-        self.pt_obst = None 
+        self.pt_obst = None
 
-        self.sim_latency_sub = rospy.Subscriber(SIM_LATENCY, Float64, callback=self.sim_latency_cb)
-        self.il_latency_sub = rospy.Subscriber(IL_LATENCY, Float64, callback=self.il_latency_cb)
-        self.mod_latency_sub = rospy.Subscriber(MODULAR_LATENCY, Float64, callback=self.mod_latency_cb)
-        self.il_pred_brake_sub = rospy.Subscriber(IL_OUTPUT, PacmodCmd, callback=self.il_pred_brake_cb)
+        self.create_subscription(Float64, SIM_LATENCY, self.sim_latency_cb, 10)
+        self.create_subscription(Float64, IL_LATENCY, self.il_latency_cb, 10)
+        self.create_subscription(Float64, MODULAR_LATENCY, self.mod_latency_cb, 10)
+        self.create_subscription(SystemCmdFloat, IL_OUTPUT, self.il_pred_brake_cb, 10)
 
         self.sim_lat = []
         self.il_lat = []
@@ -48,57 +57,62 @@ class metrics_node:
         self.start_goal_time = None
         self.end_goal_time = None
         self.first_brake_pressed = False
+        self.timer = self.create_timer(0.1, self.step)
 
-    def il_pred_brake_cb(self, msg: PacmodCmd):
-        self.pred_brake = msg.f64_cmd
+    def now_s(self):
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    def il_pred_brake_cb(self, msg: SystemCmdFloat):
+        self.pred_brake = msg.command
     def sim_latency_cb(self, msg: Float64):
         self.sim_lat.append(msg.data)
-    def il_latency_cb(self, msg:Float64):
+    def il_latency_cb(self, msg: Float64):
         self.il_lat.append(msg.data)
     def mod_latency_cb(self, msg: Float64):
         self.mod_lat.append(msg.data)
+
     def obstacle_dist_cb(self, pose_msg: PoseArray):
         gps_msg = self.gnss.snapshot()
-        if gps_msg is None:
+        if gps_msg is None or not pose_msg.poses:
             return
         cur_spd = float(gps_msg.speed) # PACMod vehicle speed
         if cur_spd > 0.1 and self.start_goal_time is None:
-            self.start_goal_time = rospy.Time.now().to_sec()
+            self.start_goal_time = self.now_s()
         (t,Q) = tf_funcs.get_gps_tf(gps_msg)
         T_gps = utils.tf_to_transform(t, Q)
         self.pt_ego = T_gps[:3,3]
+        # obstacle poses are in the same local ENU frame as the GNSS pose
         pt1 = pose_msg.poses[0].position
         self.pt_obst = [pt1.x, pt1.y, pt1.z]
-        # print("Distance to Primary Obstacle:", dist2d(pt_ego, pt_obst), 
-        #     "Ego Pt:", pt_ego, "Obstacle Pt:", pt_obst)
-    def on_shutdown(self):
+
+    def step(self):
+        if self.start_goal_time is None:
+            return
+        if dist2d(self.pt_ego, self.goal_pt) < GOAL_REACHING_THRESH_M and self.end_goal_time is None:
+            self.end_goal_time = self.now_s()
+            print("Reached Goal in", self.end_goal_time-self.start_goal_time)
+            print("Avg Sim Lat:", avg(self.sim_lat), "Avg IL Lat:", avg(self.il_lat), "Avg Mod Lat:", avg(self.mod_lat))
+
+        if self.pred_brake > 0.4 and not self.first_brake_pressed:
+            print("First Brake Pressed, obst dist:", dist2d(self.pt_ego, self.pt_obst))
+            t2goal = self.now_s() - self.start_goal_time
+            print("t2Goal:", t2goal, "Avg Sim Lat:", avg(self.sim_lat), "Avg IL Lat:", avg(self.il_lat), "Avg Mod Lat:", avg(self.mod_lat))
+            self.first_brake_pressed = True
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = MetricsNode()
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
         print("Shutting down metrics")
-    def run(self):
-        rospy.on_shutdown(self.on_shutdown)
-        r = rospy.Rate(10)
-        while not rospy.is_shutdown():
-            if self.start_goal_time is not None:
-                if dist2d(self.pt_ego, self.goal_pt) < GOAL_REACHING_THRESH_M and self.end_goal_time is None:
-                    self.end_goal_time = rospy.Time.now().to_sec() 
-                    print("Reached Goal in", self.end_goal_time-self.start_goal_time)
-                    print("Avg Sim Lat:", avg(self.sim_lat), "Avg IL Lat:", avg(self.il_lat), "Avg Mod Lat:", avg(self.mod_lat))
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
-                if self.pred_brake > 0.4 and not self.first_brake_pressed:
-                    print("First Brake Pressed, obst dist:", dist2d(self.pt_ego, self.pt_obst))
-                    t2goal = rospy.Time.now().to_sec() - self.start_goal_time
-                    print("t2Goal:", t2goal, "Avg Sim Lat:", avg(self.sim_lat), "Avg IL Lat:", avg(self.il_lat), "Avg Mod Lat:", avg(self.mod_lat))
-                    self.first_brake_pressed = True
-            r.sleep()
-
-def main():
-    node_name = "metrics"
-    param_name = "waypoint_csv_path"
-    waypoint_csv_path = rospy.get_param(f'{node_name}/{param_name}')
-    param_name = "experiment_name"
-    experiment_name = rospy.get_param(f'{node_name}/{param_name}')
-
-    node = metrics_node(waypoint_csv_path, experiment_name)
-    node.run()
 
 if __name__ == '__main__':
     main()

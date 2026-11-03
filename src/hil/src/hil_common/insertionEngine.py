@@ -528,10 +528,6 @@ def cv2gl(trans):
     return trans_gl
 
 def main():
-    import rospkg
-    rospack = rospkg.RosPack()
-    # extracted_bag_dir = os.path.join(rospack.get_path('hil'), 'data', 'extracted_bags', 'outdoor1')
-    # model_path = os.path.join(rospack.get_path('hil'), 'data', 'models')
     extracted_bag_dir = os.path.join('../../', 'data', 'extracted_bags/outdoor1_better_sync')
     model_path = os.path.join('../../', 'data', 'models')
 

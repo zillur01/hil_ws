@@ -1,43 +1,27 @@
-import rospy
-import tf
-import tf.transformations as tftrans
-
 import numpy as np
-from scipy.spatial.transform import Rotation as R
+from rclpy.duration import Duration
+from rclpy.time import Time
+import tf2_ros
 
-from hil_common.utils import *
-k_tf_timeout = rospy.Duration(1) # timeout for waiting for a tf msg
+from hil_common.utils import tf_to_transform
+# get_gps_tf lives in hil_common.pose (ROS-free); re-exported here for the nodes.
+from hil_common.pose import get_gps_tf  # noqa: F401
 
-# get_gps_tf now lives in hil_common.pose (ROS-free); re-exported here for the ROS 1 nodes.
-from hil_common.pose import get_gps_tf  # noqa: E402,F401
+k_tf_timeout = Duration(seconds=1)  # timeout for waiting for a tf msg
 
-def get_tf(src_frame: str, dst_frame: str, tf_listener: tf.TransformListener, common_t = None, convertToTransform=True) -> 'tuple[np.ndarray, np.ndarray]':
-    "Gets the transform from src to dst based on the /tf or /tf_static topic data"
-    (t,Q) = None, None
-    if common_t == None:
-        common_t = tf_listener.getLatestCommonTime(src_frame, dst_frame)
-        print(common_t)
-    tf_listener.waitForTransform(dst_frame, src_frame, common_t, k_tf_timeout)  
 
-    # common_t = rospy.Time(0)
+def get_tf(src_frame: str, dst_frame: str, tf_buffer: tf2_ros.Buffer, common_t: Time = None,
+           convertToTransform=True) -> 'np.ndarray | tuple[np.ndarray, np.ndarray]':
+    """Gets the transform from src to dst based on the /tf or /tf_static topic data.
 
-    (t, Q) = tf_listener.lookupTransform(dst_frame, src_frame, common_t)
+    tf_buffer: a tf2_ros.Buffer filled by a tf2_ros.TransformListener of a spinning node.
+    common_t: time of the transform; None = latest available.
+    Raises tf2_ros.LookupException / ExtrapolationException / ConnectivityException if not available."""
+    when = Time() if common_t is None else common_t
+    tf_msg = tf_buffer.lookup_transform(dst_frame, src_frame, when, timeout=k_tf_timeout)
+    tr, rot = tf_msg.transform.translation, tf_msg.transform.rotation
+    t = np.array([tr.x, tr.y, tr.z])
+    Q = np.array([rot.x, rot.y, rot.z, rot.w])
     if convertToTransform:
         return tf_to_transform(t, Q)
     return (t, Q)
-
-def get_gem_tf():
-    """DOES NOT WORK! Returns Transform from depth to rgb frame for gem vehicle"""
-    listener = tf.TransformListener()
-    T_w_rgb = get_tf('base_link', 'front_camera_link', listener) #@ get_tf('front_camera_link', 'front_single_camera_link', listener)
-
-    T_toprack_depth = get_tf('top_rack_link', 'VLP-16_base_link', listener)
-    T_w_toprack = get_tf('base_link', 'top_rack_link', listener)
-    T_w_depth = T_w_toprack @ T_toprack_depth
-    T_depth_rgb = inverse_transform(T_w_depth) @ T_w_rgb 
-    T_depth_rgb = get_tf('lidar1', 'front_camera_link', listener)
-    # T_depth_rgb[:3,:3] = np.eye(3)
-    print(f"T_world^depth: {T_w_depth}")
-    print(f"T_world^rgb: {T_w_rgb} done ")
-    print(f"T_depth^rgb: {T_depth_rgb}")
-    return T_depth_rgb

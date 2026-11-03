@@ -1,11 +1,32 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import rospy, ros_numpy
-from sensor_msgs.msg import PointCloud2, CameraInfo, Image
-import tf.transformations as tftrans
+from scipy.spatial.transform import Rotation
+from sensor_msgs.msg import PointCloud2, PointField, CameraInfo, Image
 
 k_wait_msg_timeout = 10
+
+
+def stamp_to_sec(stamp) -> float:
+    """builtin_interfaces/Time -> seconds"""
+    return stamp.sec + stamp.nanosec * 1e-9
+
+
+def stamp_to_nsec(stamp) -> int:
+    """builtin_interfaces/Time -> integer nanoseconds"""
+    return stamp.sec * 1_000_000_000 + stamp.nanosec
+
+
+def quaternion_from_matrix(T) -> np.ndarray:
+    """(x, y, z, w) quaternion of the rotation part of a 3x3 or 4x4 matrix"""
+    return Rotation.from_matrix(np.asarray(T)[:3, :3]).as_quat()
+
+
+def quaternion_matrix(Q) -> np.ndarray:
+    """4x4 homogeneous rotation matrix of an (x, y, z, w) quaternion"""
+    T = np.eye(4)
+    T[:3, :3] = Rotation.from_quat(Q).as_matrix()
+    return T
 
 def inverse_transform(T):
     R, t = T[0:3, 0:3], T[0:3, 3]
@@ -17,11 +38,11 @@ def inverse_transform(T):
 
 def transform_to_tf(T):
     t = T[:3,3]
-    Q = tftrans.quaternion_from_matrix(T)
+    Q = quaternion_from_matrix(T)
     return (t, Q)
 
 def tf_to_transform(trans, Q):
-    T = tftrans.quaternion_matrix(Q)
+    T = quaternion_matrix(Q)
     T[0:3, 3] = trans
     return T
 
@@ -96,7 +117,7 @@ def color_pointcloud(pts_depth: np.ndarray, cur_image: np.ndarray,
     imgfov_pts['r'] = rgb_pts[:, 0]
     imgfov_pts['g'] = rgb_pts[:, 1]
     imgfov_pts['b'] = rgb_pts[:, 2]
-    imgfov_pts = ros_numpy.point_cloud2.merge_rgb_fields(imgfov_pts)
+    imgfov_pts = merge_rgb_fields(imgfov_pts)
 
     # Create color map and paint circles with color corresponding to depth
     if visualize_projection:
@@ -114,23 +135,78 @@ def color_pointcloud(pts_depth: np.ndarray, cur_image: np.ndarray,
     return imgfov_pts
 
 
-def get_camera_info(topic_name: str)-> CameraInfo:
-    cam_info = None
+def merge_rgb_fields(pts: np.ndarray) -> np.ndarray:
+    """Structured array with x, y, z, r, g, b fields -> x, y, z, rgb, with r, g, b packed into one
+    float32 the way RViz and PCL expect it (replaces ros_numpy.point_cloud2.merge_rgb_fields)."""
+    rgb = ((pts['r'].astype(np.uint32) << 16) | (pts['g'].astype(np.uint32) << 8)
+           | pts['b'].astype(np.uint32))
+    out = np.zeros(pts.shape[0], dtype=[('x', float), ('y', float), ('z', float), ('rgb', np.float32)])
+    out['x'], out['y'], out['z'] = pts['x'], pts['y'], pts['z']
+    out['rgb'] = rgb.view(np.float32)
+    return out
+
+
+def pointcloud2_to_xyz(msg: PointCloud2) -> np.ndarray:
+    """(N, 3) float array of the finite x, y, z points of a PointCloud2"""
+    from sensor_msgs_py import point_cloud2
+    pts = point_cloud2.read_points(msg, field_names=('x', 'y', 'z'), skip_nans=True)
+    return np.column_stack([pts['x'], pts['y'], pts['z']]).astype(float)
+
+
+def xyzrgb_to_pointcloud2(pts: np.ndarray, stamp, frame_id: str) -> PointCloud2:
+    """Structured array with x, y, z, rgb fields (see merge_rgb_fields) -> PointCloud2 (float32 fields)"""
+    names = ('x', 'y', 'z', 'rgb')
+    packed = np.zeros(pts.shape[0], dtype=[(n, np.float32) for n in names])
+    for n in names:
+        packed[n] = pts[n]
+    msg = PointCloud2()
+    msg.header.stamp = stamp
+    msg.header.frame_id = frame_id
+    msg.height = 1
+    msg.width = packed.shape[0]
+    msg.fields = [PointField(name=n, offset=4 * i, datatype=PointField.FLOAT32, count=1)
+                  for i, n in enumerate(names)]
+    msg.is_bigendian = False
+    msg.point_step = 16
+    msg.row_step = msg.point_step * msg.width
+    msg.is_dense = True
+    msg.data = packed.tobytes()
+    return msg
+
+
+def get_camera_info(node, topic_name: str, timeout_s: float = k_wait_msg_timeout) -> CameraInfo:
+    """Waits for one CameraInfo message on topic_name (None after timeout_s seconds).
+    Call it before creating the node's other subscriptions: it spins the node while waiting."""
+    import time
+    import rclpy
+    from rclpy.qos import qos_profile_sensor_data
+    received = []
+    sub = node.create_subscription(CameraInfo, topic_name, received.append, qos_profile_sensor_data)
+    deadline = time.monotonic() + timeout_s
     try:
-        cam_info = rospy.wait_for_message(topic_name, CameraInfo, timeout=k_wait_msg_timeout)
-    except rospy.ROSException:
-        print("Exception while getting camera info")
-    return cam_info
+        while not received and rclpy.ok() and time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
+    finally:
+        node.destroy_subscription(sub)
+    if not received:
+        node.get_logger().error(f"No camera info on {topic_name} after {timeout_s} s")
+        return None
+    return received[0]
+
+# CameraInfo matrices are lower case in ROS 2 (d, k, p) and upper case in ROS 1 (D, K, P);
+# the calibration node is still ROS 1, so both are accepted.
+def _cam_field(info_msg, name):
+    return getattr(info_msg, name.lower()) if hasattr(info_msg, name.lower()) else getattr(info_msg, name)
 
 def get_dist_matrix(info_msg: CameraInfo):
-    return np.array(info_msg.D)
+    return np.array(_cam_field(info_msg, 'D'))
 
 def get_camera_matrix(info_msg: CameraInfo):
-    K = np.array(info_msg.K).reshape(3,3)
+    K = np.array(_cam_field(info_msg, 'K')).reshape(3,3)
     return K
 
 def get_projection_matrix(info_msg: CameraInfo):
-    P = np.array(info_msg.P).reshape(3,4)
+    P = np.array(_cam_field(info_msg, 'P')).reshape(3,4)
     print(f"Projection Matrix:{P}")
     return P
 

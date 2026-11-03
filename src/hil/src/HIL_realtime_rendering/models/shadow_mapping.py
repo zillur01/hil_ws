@@ -8,9 +8,8 @@ import moderngl as mgl
 import moderngl_window as mglw
 from moderngl_window import geometry
 import glm
-import rospkg, os, sys
-rospack = rospkg.RosPack()
-rendering_lib_path = os.path.join(rospack.get_path('hil'), 'src', 'HIL_realtime_rendering')
+import os, sys
+rendering_lib_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # HIL_realtime_rendering
 sys.path.append(rendering_lib_path)
 # os.chdir(rendering_lib_path)
 from constants import T_blender2opengl
