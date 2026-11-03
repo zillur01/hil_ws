@@ -9,6 +9,7 @@ Outputs: /insertion/rendered_image (rgb8), /insertion/rendered_depth (32FC1, dep
 
 Run with `colcon build --symlink-install` (the renderer and its assets are loaded from the source tree).
 """
+import math
 import os
 import sys
 import time
@@ -18,6 +19,7 @@ import message_filters
 import numpy as np
 import rclpy
 from rclpy.executors import ExternalShutdownException
+from rcl_interfaces.msg import ParameterDescriptor
 import torch
 import torch.nn.functional as F
 from geometry_msgs.msg import Pose, PoseArray
@@ -91,6 +93,11 @@ class InsertionNode(Node):
         self.declare_parameter('renderer_dir', '')
         self.declare_parameter('show_debug', False)
         self.declare_parameter('auto_origin_alt', False)
+        # Optional placement of the first jaywalking actor (nan = keep the config): local ENU position,
+        # compass heading it walks along, and the distance at which it starts walking.
+        num = ParameterDescriptor(dynamic_typing=True)
+        for name in ('actor_east', 'actor_north', 'actor_walk_heading_deg', 'trigger_distance'):
+            self.declare_parameter(name, float('nan'), num)
         renderer_dir = self.get_parameter('renderer_dir').value or default_renderer_dir()
         config_path = self.get_parameter('config_path').value
         self.show_debug = self.get_parameter('show_debug').value
@@ -103,6 +110,7 @@ class InsertionNode(Node):
                 "or pass the 'renderer_dir' parameter.")
         config_path = resolve_config_path(config_path, renderer_dir)
         self.config = OmegaConf.load(config_path)
+        self.override_actor()
         self.window_size = tuple(self.config.window_size)
         self.get_logger().info(f"Config: {config_path}, render size {self.window_size}")
 
@@ -121,6 +129,7 @@ class InsertionNode(Node):
         self.T_gps = None
         self.call_insert = False
         self.origin_alt_set = False
+        self._last_log = {}
         self.n_insertion = 0  # number of times img_insertion is called
         self.n_callback = 0   # number of times im_depth_callback is called
 
@@ -168,6 +177,38 @@ class InsertionNode(Node):
         self.n_callback += 1
         self.call_insert = True
 
+    def override_actor(self):
+        """Apply actor_east / actor_north / actor_walk_heading_deg / trigger_distance to actor_0 of the
+        jaywalking scenario. The config stores positions as [-East, 0, North] and the walking direction as
+        a rotation about the vertical axis (0 = north, 90 = west), see README."""
+        east, north, walk, trigger = (float(self.get_parameter(n).value) for n in (
+            'actor_east', 'actor_north', 'actor_walk_heading_deg', 'trigger_distance'))
+        if all(math.isnan(v) for v in (east, north, walk, trigger)):
+            return
+        jay = self.config.scenario_configs.get('jaywalking')
+        if jay is None or not jay.get('is_activated') or 'actor_0' not in jay.get('actor_configs', {}):
+            raise RuntimeError("actor_* parameters need a config with jaywalking.is_activated and actor_0 "
+                               "(e.g. gem/jaywalker.yaml)")
+        t = jay.actor_configs.actor_0.object2scenario
+        if not (math.isnan(east) or math.isnan(north)):
+            t.pos = [-east, 0.0, north]
+        if not math.isnan(walk):
+            t.rot = [0.0, (-walk) % 360.0, 0.0]
+        if not math.isnan(trigger):
+            jay.trigger_distance = trigger
+        self.get_logger().info(f"actor_0 override: ENU ({east}, {north}), walks towards compass {walk} deg, "
+                               f"trigger {trigger} m")
+
+    def log_due(self, key, period_s=2.0):
+        """True at most once per period_s for each key. Used instead of rclpy's throttle_duration_sec,
+        which still walks the Python stack (inspect) on every call: with torch loaded that cost about
+        40% of the frame time (16 -> 27 FPS when removed)."""
+        now = time.monotonic()
+        if now - self._last_log.get(key, -1e9) < period_s:
+            return False
+        self._last_log[key] = now
+        return True
+
     def step(self):
         if self.call_insert:
             self.img_insertion()
@@ -207,10 +248,10 @@ class InsertionNode(Node):
         self.latency_pub.publish(Float64(data=latency))
         self.n_insertion += 1
         current_time, _ = self.timer.next_frame()
-        self.get_logger().info(
-            f"frame {self.n_insertion}, {self.n_insertion / current_time:.1f} FPS, latency {latency:.3f} s, "
-            f"camera ENU ({cam2world[0, 3]:.2f}, {cam2world[1, 3]:.2f}, {cam2world[2, 3]:.2f})",
-            throttle_duration_sec=2.0)
+        if self.log_due('frame'):
+            self.get_logger().info(
+                f"frame {self.n_insertion}, {self.n_insertion / current_time:.1f} FPS, latency {latency:.3f} s, "
+                f"camera ENU ({cam2world[0, 3]:.2f}, {cam2world[1, 3]:.2f}, {cam2world[2, 3]:.2f})")
         if not self.window.is_closing:
             self.window.swap_buffers()
         self.call_insert = False
@@ -229,11 +270,10 @@ class InsertionNode(Node):
             p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w = (float(v) for v in q)
             msg.poses.append(p)
         self.sim_obst_publisher.publish(msg)
-        if msg.poses:
+        if msg.poses and self.log_due('obstacles'):
             self.get_logger().info(
                 "obstacles (ENU east, north, up): " +
-                "; ".join(f"({p.position.x:.1f}, {p.position.y:.1f}, {p.position.z:.1f})" for p in msg.poses),
-                throttle_duration_sec=2.0)
+                "; ".join(f"({p.position.x:.1f}, {p.position.y:.1f}, {p.position.z:.1f})" for p in msg.poses))
 
     def destroy_node(self):
         try:

@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -16,6 +17,12 @@ def generate_launch_description():
         DeclareLaunchArgument('show_debug', default_value='false'),
         # use the first received GNSS height as local height 0 (see README, first test)
         DeclareLaunchArgument('auto_origin_alt', default_value='false'),
+        # optional placement of the pedestrian (actor_0) of a jaywalking config such as gem/jaywalker.yaml;
+        # `ros2 run hil plan_pedestrian.py` prints a command with these filled in. nan = keep the config.
+        DeclareLaunchArgument('actor_east', default_value='nan'),
+        DeclareLaunchArgument('actor_north', default_value='nan'),
+        DeclareLaunchArgument('actor_walk_heading_deg', default_value='nan'),
+        DeclareLaunchArgument('trigger_distance', default_value='nan'),
         # true when playing a bag with `ros2 bag play --clock`
         DeclareLaunchArgument('use_sim_time', default_value='false'),
     ]
@@ -29,6 +36,8 @@ def generate_launch_description():
             'show_debug': LaunchConfiguration('show_debug'),
             'auto_origin_alt': LaunchConfiguration('auto_origin_alt'),
             'use_sim_time': LaunchConfiguration('use_sim_time'),
+            **{n: ParameterValue(LaunchConfiguration(n), value_type=float) for n in (
+                'actor_east', 'actor_north', 'actor_walk_heading_deg', 'trigger_distance')},
         }],
         # the node uses the placeholder names /rgb and /depth
         remappings=[('/rgb', LaunchConfiguration('rgb_topic')), ('/depth', LaunchConfiguration('depth_topic'))],
